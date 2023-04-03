@@ -31,7 +31,7 @@ async fn filewatcher_starts_default_config() {
 async fn filewatch_watches_file() {
     // Setup
     let mut dir = temp_dir();
-    let file_name = format!("filewatch_watches_file.txt");
+    let file_name = "filewatch_watches_file.txt".to_string();
     dir.push(file_name);
 
     let mut file = std::fs::OpenOptions::new()
