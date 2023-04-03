@@ -123,14 +123,14 @@ impl Actor for FileWatcher {
                 return Err(e.into());
             }
             FileWatcherMessage::Subscribe(who, f, reply) => {
-                if let None = state.subscriptions.insert(who, f) {
+                if state.subscriptions.insert(who, f).is_none() {
                     let _ = reply.send(SubscriptionResult::Ok);
                 } else {
                     let _ = reply.send(SubscriptionResult::Duplicate);
                 }
             }
             FileWatcherMessage::Unsubscribe(who, reply) => {
-                if let Some(_) = state.subscriptions.remove(&who) {
+                if state.subscriptions.remove(&who).is_some() {
                     let _ = reply.send(SubscriptionResult::Ok);
                 } else {
                     let _ = reply.send(SubscriptionResult::NotFound);
