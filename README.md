@@ -24,6 +24,7 @@ ractor_actors = { version = "0.1", features = ["filewatcher"] }
 The following utility actors are defined in this crate (enable with the associated feature in brackets):
 
 1. Filewatcher (feature `filewatcher`) - Watch files and directories for changes. Built with `notify`.
+2. Tcp actors (feature `net`) - Listen for incoming connections and handle messages in/out from them as sessions.
 
 ## Contributors
 
