@@ -1,29 +1,6 @@
-[package]
-name = "ractor_actors"
-version = "0.1.0"
-authors = ["Sean Lawlor"]
-description = "Helpful actors built with Ractor"
-documentation = "https://docs.rs/ractor_actors"
-license = "MIT"
-edition = "2018"
-keywords = ["actor", "ractor"]
-repository = "https://github.com/slawlor/ractor"
-readme = "../README.md"
-homepage = "https://github.com/slawlor/ractor"
-categories = ["actor", "erlang"]
+[workspace]
 
-[features]
-filewatcher = ["notify"]
-default = ["filewatcher"]
-
-[dependencies]
-# Required dependencies
-async-trait = "0.1"
-log = "0.4"
-ractor = { version = "0.7" }
-tokio = { version = "1", features = ["sync", "time"] }
-# Feature-specific dependencies
-notify = { version = "5", optional = true }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["rt", "time", "sync", "macros", "rt-multi-thread"] }
+members = [
+    "ractor_actors",
+    "xtask"
+]
