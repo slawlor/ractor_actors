@@ -1,7 +1,7 @@
 # ractor_actors
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/slawlor/ractor_actors/main/docs/ai_logo.jpeg" width="20%" /> 
+    <img src="https://raw.githubusercontent.com/slawlor/ractor/main/docs/ractor_logo.svg" width="50%" /> 
 </p>
 
 Common utility actors built with [Ractor](https://github.com/slawlor/ractor)
