@@ -14,7 +14,8 @@ categories = ["actor", "erlang"]
 
 [features]
 filewatcher = ["notify"]
-default = ["filewatcher"]
+net = ["tokio/net", "tokio/io-util", "tokio/macros", "tokio-rustls"]
+default = ["filewatcher", "net"]
 
 [dependencies]
 # Required dependencies
@@ -24,6 +25,7 @@ ractor = { version = "0.7" }
 tokio = { version = "1", features = ["sync", "time"] }
 # Feature-specific dependencies
 notify = { version = "5", optional = true }
+tokio-rustls = { version = "0.23", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "time", "sync", "macros", "rt-multi-thread"] }
