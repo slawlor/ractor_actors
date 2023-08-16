@@ -68,7 +68,7 @@ impl Actor for FileWatcher {
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         arguments: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         // Automatically select the best implementation for your platform.
@@ -97,7 +97,7 @@ impl Actor for FileWatcher {
 
     async fn post_stop(
         &self,
-        _: ActorRef<Self>,
+        _: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         if let Some(w) = state.watcher.take() {
@@ -108,7 +108,7 @@ impl Actor for FileWatcher {
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {

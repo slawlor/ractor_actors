@@ -51,7 +51,7 @@ where
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         let addr = format!("0.0.0.0:{}", args.port);
@@ -75,7 +75,7 @@ where
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         // close the listener properly, in case anyone else has handles to the actor stopping
@@ -86,7 +86,7 @@ where
 
     async fn handle(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         _message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {

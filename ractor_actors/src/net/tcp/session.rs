@@ -28,8 +28,8 @@ pub struct TcpSessionState<R>
 where
     R: FrameReceiver,
 {
-    writer: ActorRef<SessionWriter>,
-    reader: ActorRef<SessionReader<R>>,
+    writer: ActorRef<SessionWriterMessage>,
+    reader: ActorRef<SessionReaderMessage>,
     receiver: R,
     peer_addr: SocketAddr,
     local_addr: SocketAddr,
@@ -64,7 +64,7 @@ where
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         let (peer_addr, local_addr) = (args.tcp_session.peer_addr(), args.tcp_session.local_addr());
@@ -115,7 +115,7 @@ where
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         log::info!("TCP Session closed for {}", state.peer_addr);
@@ -124,7 +124,7 @@ where
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -153,7 +153,7 @@ where
 
     async fn handle_supervisor_evt(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         message: SupervisionEvent,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -289,7 +289,7 @@ impl Actor for SessionWriter {
 
     async fn pre_start(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         writer: ActorWriteHalf,
     ) -> Result<Self::State, ActorProcessingErr> {
         // OK we've established connection, now we can process requests
@@ -301,7 +301,7 @@ impl Actor for SessionWriter {
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         // drop the channel to close it should we be exiting
@@ -311,7 +311,7 @@ impl Actor for SessionWriter {
 
     async fn handle(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -347,11 +347,8 @@ impl Actor for SessionWriter {
 
 // =========== Tcp Session reader ============ //
 
-struct SessionReader<R>
-where
-    R: FrameReceiver,
-{
-    session: ActorRef<TcpSession<R>>,
+struct SessionReader {
+    session: ActorRef<TcpSessionMessage>,
 }
 
 /// The node connection messages
@@ -368,17 +365,14 @@ struct SessionReaderState {
 }
 
 #[async_trait::async_trait]
-impl<R> Actor for SessionReader<R>
-where
-    R: FrameReceiver,
-{
+impl Actor for SessionReader {
     type Msg = SessionReaderMessage;
     type Arguments = ActorReadHalf;
     type State = SessionReaderState;
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         reader: ActorReadHalf,
     ) -> Result<Self::State, ActorProcessingErr> {
         // start waiting for the first object on the network
@@ -390,7 +384,7 @@ where
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self>,
+        _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         // drop the channel to close it should we be exiting
@@ -400,7 +394,7 @@ where
 
     async fn handle(
         &self,
-        myself: ActorRef<Self>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
