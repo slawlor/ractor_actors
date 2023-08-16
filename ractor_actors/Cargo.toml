@@ -14,16 +14,21 @@ categories = ["actor", "erlang"]
 
 [features]
 filewatcher = ["notify"]
-default = ["filewatcher"]
+net = ["tokio/net", "tokio/io-util", "tokio/macros", "tokio-rustls"]
+time = ["chrono", "cron"]
+
+default = ["filewatcher", "net", "time"]
 
 [dependencies]
 # Required dependencies
-async-trait = "0.1"
-log = "0.4"
-ractor = { version = "0.7" }
+ractor = { version = "0.9" }
 tokio = { version = "1", features = ["sync", "time"] }
+tracing = "0.1"
 # Feature-specific dependencies
+chrono = { version = "0.4", optional = true }
+cron = { version = "0.12", optional = true }
 notify = { version = "5", optional = true }
+tokio-rustls = { version = "0.23", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "time", "sync", "macros", "rt-multi-thread"] }
