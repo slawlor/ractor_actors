@@ -60,7 +60,7 @@ pub struct FileWatcherState {
     subscriptions: HashMap<ActorId, Box<dyn FileWatcherSubscriber>>,
 }
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl Actor for FileWatcher {
     type Msg = FileWatcherMessage;
     type State = FileWatcherState;
@@ -119,7 +119,7 @@ impl Actor for FileWatcher {
                 }
             }
             FileWatcherMessage::FwError(e) => {
-                log::error!("Filewatcher error: {:?}", e);
+                tracing::error!("Filewatcher error: {:?}", e);
                 return Err(e.into());
             }
             FileWatcherMessage::Subscribe(who, f, reply) => {

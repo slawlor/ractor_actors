@@ -92,14 +92,14 @@ pub enum IncomingEncryptionMode {
 }
 
 /// Represents a receiver of frames of data
-#[async_trait::async_trait]
+#[ractor::async_trait]
 pub trait FrameReceiver: Send + Sync + 'static {
     /// Called when a frame is received by the [TcpSession] actor
     async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr>;
 }
 
 /// Represents
-#[async_trait::async_trait]
+#[ractor::async_trait]
 pub trait SessionAcceptor: Send + Sync + 'static {
     /// Called when a new incoming session is received by a [TcpListener] actor
     async fn new_session(&self, session: NetworkStream) -> Result<(), ActorProcessingErr>;

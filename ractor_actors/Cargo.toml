@@ -21,8 +21,6 @@ default = ["filewatcher", "net", "time"]
 
 [dependencies]
 # Required dependencies
-async-trait = "0.1"
-log = "0.4"
 ractor = { version = "0.9" }
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"

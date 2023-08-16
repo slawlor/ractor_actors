@@ -25,7 +25,7 @@ use worker::{Cron, CronMessage};
 ///
 /// If the job takes longer than the period, queueing may occur and the
 /// job may violate scheduling
-#[async_trait::async_trait]
+#[ractor::async_trait]
 pub trait Job: State {
     /// Retrieve the name of the cron job for logging
     fn id<'a>(&self) -> &'a str;
@@ -65,7 +65,7 @@ pub enum CronManagerMessage {
     Stop(String),
 }
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl Actor for CronManager {
     type Msg = CronManagerMessage;
     type State = CronManagerState;
@@ -184,5 +184,143 @@ impl Actor for CronManager {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        str::FromStr,
+        sync::{
+            atomic::{AtomicU16, Ordering},
+            Arc,
+        },
+    };
+
+    use ractor::concurrency::{sleep, Duration};
+
+    use super::*;
+
+    struct BadJob;
+    #[ractor::async_trait]
+    impl Job for BadJob {
+        fn id<'a>(&self) -> &'a str {
+            "bad_job"
+        }
+        async fn work(&mut self) -> Result<(), ActorProcessingErr> {
+            panic!("Boom!");
+        }
+    }
+
+    struct CounterJob {
+        counter: Arc<AtomicU16>,
+    }
+    #[ractor::async_trait]
+    impl Job for CounterJob {
+        fn id<'a>(&self) -> &'a str {
+            "counter_job"
+        }
+        async fn work(&mut self) -> Result<(), ActorProcessingErr> {
+            self.counter.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+    }
+
+    #[ractor::concurrency::test]
+    async fn test_cron_lifecycle() {
+        // Setup
+        let schedule = " */1    *     *         *            *          *          *";
+        let schedule = Schedule::from_str(schedule).expect("Failed to parse schedule");
+        let counter = Arc::new(AtomicU16::new(0));
+        let (manager, mhandle) = Actor::spawn(None, CronManager, ())
+            .await
+            .expect("Failed to spawn cron manager");
+        let counter_job = CounterJob {
+            counter: counter.clone(),
+        };
+
+        // Act & Verify
+        manager
+            .call(
+                |prt| {
+                    CronManagerMessage::Start(
+                        CronSettings {
+                            schedule,
+                            job: Box::new(counter_job),
+                        },
+                        prt,
+                    )
+                },
+                Some(Duration::from_millis(100)),
+            )
+            .await
+            .expect("Failed to send start message")
+            .expect("Cron send timed out")
+            .expect("Failed to start cron job with error");
+
+        let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
+            .expect("Failed to query jobs list");
+        assert!(result.contains_key("counter_job"));
+
+        // check job is running and cron is executing
+        sleep(Duration::from_secs(4)).await;
+        assert!(counter.load(Ordering::Relaxed) >= 3);
+        assert!(counter.load(Ordering::Relaxed) < 5);
+
+        manager
+            .cast(CronManagerMessage::Stop("counter_job".to_string()))
+            .expect("Failed to contact cron manager");
+        let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
+            .expect("Failed to query jobs list");
+        assert!(!result.contains_key("counter_job"));
+
+        // Cleanup
+        manager.stop(None);
+        mhandle.await.unwrap();
+    }
+
+    #[ractor::concurrency::test]
+    async fn test_failing_cronjob() {
+        // Setup
+        let schedule = " */1    *     *         *            *          *          *";
+        let schedule = Schedule::from_str(schedule).expect("Failed to parse schedule");
+        let (manager, mhandle) = Actor::spawn(None, CronManager, ())
+            .await
+            .expect("Failed to spawn cron manager");
+
+        // Act & Verify
+        manager
+            .call(
+                |prt| {
+                    CronManagerMessage::Start(
+                        CronSettings {
+                            schedule,
+                            job: Box::new(BadJob),
+                        },
+                        prt,
+                    )
+                },
+                Some(Duration::from_millis(100)),
+            )
+            .await
+            .expect("Failed to send start message")
+            .expect("Cron send timed out")
+            .expect("Failed to start cron job with error");
+
+        let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
+            .expect("Failed to query jobs list");
+        assert!(result.contains_key("bad_job"));
+
+        // check job is running and cron is executing
+        sleep(Duration::from_secs(2)).await;
+
+        // job failed on first execution so it should be removed now
+        let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
+            .expect("Failed to query jobs list");
+        assert!(!result.contains_key("counter_job"));
+
+        // Cleanup
+        manager.stop(None);
+        mhandle.await.unwrap();
     }
 }

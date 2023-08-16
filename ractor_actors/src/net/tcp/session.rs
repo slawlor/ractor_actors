@@ -53,7 +53,7 @@ where
     _r: PhantomData<R>,
 }
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl<R> Actor for TcpSession<R>
 where
     R: FrameReceiver,
@@ -118,7 +118,7 @@ where
         _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        log::info!("TCP Session closed for {}", state.peer_addr);
+        tracing::info!("TCP Session closed for {}", state.peer_addr);
         Ok(())
     }
 
@@ -130,7 +130,7 @@ where
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Self::Msg::Send(msg) => {
-                log::debug!(
+                tracing::debug!(
                     "SEND: {} -> {} - '{:?}'",
                     state.local_addr,
                     state.peer_addr,
@@ -139,7 +139,7 @@ where
                 let _ = state.writer.cast(SessionWriterMessage::Write(msg));
             }
             Self::Msg::FrameReady(msg) => {
-                log::debug!(
+                tracing::debug!(
                     "RECEIVE {} <- {} - '{:?}'",
                     state.local_addr,
                     state.peer_addr,
@@ -162,21 +162,21 @@ where
         match message {
             SupervisionEvent::ActorPanicked(actor, panic_msg) => {
                 if actor.get_id() == state.reader.get_id() {
-                    log::error!("TCP Session's reader panicked with '{}'", panic_msg);
+                    tracing::error!("TCP Session's reader panicked with '{}'", panic_msg);
                 } else if actor.get_id() == state.writer.get_id() {
-                    log::error!("TCP Session's writer panicked with '{}'", panic_msg);
+                    tracing::error!("TCP Session's writer panicked with '{}'", panic_msg);
                 } else {
-                    log::error!("TCP Session received a child panic from an unknown child actor ({}) - '{}'", actor.get_id(), panic_msg);
+                    tracing::error!("TCP Session received a child panic from an unknown child actor ({}) - '{}'", actor.get_id(), panic_msg);
                 }
                 myself.stop(Some("child_panic".to_string()));
             }
             SupervisionEvent::ActorTerminated(actor, _, exit_reason) => {
                 if actor.get_id() == state.reader.get_id() {
-                    log::debug!("TCP Session's reader exited");
+                    tracing::debug!("TCP Session's reader exited");
                 } else if actor.get_id() == state.writer.get_id() {
-                    log::debug!("TCP Session's writer exited");
+                    tracing::debug!("TCP Session's writer exited");
                 } else {
-                    log::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{:?}'", actor.get_id(), exit_reason);
+                    tracing::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{:?}'", actor.get_id(), exit_reason);
                 }
                 myself.stop(Some("child_terminate".to_string()));
             }
@@ -281,7 +281,7 @@ enum SessionWriterMessage {
     Write(Frame),
 }
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl Actor for SessionWriter {
     type Msg = SessionWriterMessage;
     type Arguments = ActorWriteHalf;
@@ -323,12 +323,12 @@ impl Actor for SessionWriter {
                     }
 
                     if let Err(write_err) = stream.write_u64(msg.len() as u64).await {
-                        log::warn!("Error writing to the stream '{}'", write_err);
+                        tracing::warn!("Error writing to the stream '{}'", write_err);
                     } else {
-                        log::trace!("Wrote length, writing payload (len={})", msg.len());
+                        tracing::trace!("Wrote length, writing payload (len={})", msg.len());
                         // now send the object
                         if let Err(write_err) = stream.write_all(&msg).await {
-                            log::warn!("Error writing to the stream '{}'", write_err);
+                            tracing::warn!("Error writing to the stream '{}'", write_err);
                             myself.stop(Some("channel_closed".to_string()));
                             return Ok(());
                         }
@@ -364,7 +364,7 @@ struct SessionReaderState {
     reader: Option<ActorReadHalf>,
 }
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl Actor for SessionReader {
     type Msg = SessionReaderMessage;
     type Arguments = ActorReadHalf;
@@ -403,18 +403,18 @@ impl Actor for SessionReader {
                 if let Some(stream) = &mut state.reader {
                     match stream.read_u64().await {
                         Ok(length) => {
-                            log::trace!("Payload length message ({}) received", length);
+                            tracing::trace!("Payload length message ({}) received", length);
                             let _ = myself.cast(SessionReaderMessage::ReadFrame(length));
                             return Ok(());
                         }
                         Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                            log::trace!("Error (EOF) on stream");
+                            tracing::trace!("Error (EOF) on stream");
                             // EOF, close the stream by dropping the stream
                             drop(state.reader.take());
                             myself.stop(Some("channel_closed".to_string()));
                         }
                         Err(_other_err) => {
-                            log::trace!("Error ({:?}) on stream", _other_err);
+                            tracing::trace!("Error ({:?}) on stream", _other_err);
                             // some other TCP error, more handling necessary
                         }
                     }
@@ -426,7 +426,7 @@ impl Actor for SessionReader {
                 if let Some(stream) = &mut state.reader {
                     match read_n_bytes(stream, length as usize).await {
                         Ok(buf) => {
-                            log::trace!("Payload of length({}) received", buf.len());
+                            tracing::trace!("Payload of length({}) received", buf.len());
                             // NOTE: Our implementation writes 2 messages when sending something over the wire, the first
                             // is exactly 8 bytes which constitute the length of the payload message (u64 in big endian format),
                             // followed by the payload. This tells our TCP reader how much data to read off the wire

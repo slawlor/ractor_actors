@@ -40,7 +40,7 @@ where
 
 pub struct ListenerMessage;
 
-#[async_trait::async_trait]
+#[ractor::async_trait]
 impl<R> Actor for Listener<R>
 where
     R: SessionAcceptor,
@@ -109,7 +109,10 @@ where
                                     stream: enc_stream,
                                 }),
                                 Err(some_err) => {
-                                    log::warn!("Error establishing secure socket: {}", some_err);
+                                    tracing::warn!(
+                                        "Error establishing secure socket: {}",
+                                        some_err
+                                    );
                                     None
                                 }
                             }
@@ -118,11 +121,11 @@ where
 
                     if let Some(stream) = session {
                         state.acceptor.new_session(stream).await?;
-                        log::info!("TCP Session opened for {}", addr);
+                        tracing::info!("TCP Session opened for {}", addr);
                     }
                 }
                 Err(socket_accept_error) => {
-                    log::warn!(
+                    tracing::warn!(
                         "Error accepting socket {} on Node server",
                         socket_accept_error
                     );
