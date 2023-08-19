@@ -23,9 +23,9 @@ jobs:
       env:
         CRATES_IO_TOKEN: ${{ secrets.crates_io_token }}
     
-    - name: Dry run publish ractor
+    - name: Dry run publish ractor_actors
       run: cargo publish --dry-run --manifest-path Cargo.toml -p ractor_actors
-    - name: Publish crate ractor
+    - name: Publish crate ractor_actors
       run: cargo publish --manifest-path Cargo.toml -p ractor_actors
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.crates_io_token }}
