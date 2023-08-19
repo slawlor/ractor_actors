@@ -15,13 +15,14 @@
 //! # Example usage:
 //!
 //! ```rust
+//! use std::str::FromStr;
 //! use std::time::Duration;
 //!
 //! use cron::Schedule;
 //! use ractor::{async_trait, Actor, ActorProcessingErr};
 //! use ractor_actors::time::cron::*;
 //!
-//! type SomeJob;
+//! struct SomeJob;
 //!
 //! #[async_trait]
 //! impl Job for SomeJob {
