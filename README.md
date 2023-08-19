@@ -14,9 +14,8 @@ you can often intermingle these utility actors with non-actor async workflows.
 ## Installation
 
 ```toml
-
 [dependencies]
-ractor_actors = { version = "0.1", features = ["filewatcher"] }
+ractor_actors = "0.1"
 ```
 
 ## What's here?

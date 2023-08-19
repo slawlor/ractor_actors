@@ -19,7 +19,7 @@ use super::*;
 pub enum TcpSessionMessage {
     /// Send a frame over the wire
     Send(Frame),
-    /// Received a frame from the [SessionReader] child
+    /// Received a frame from the `SessionReader` child
     FrameReady(Frame),
 }
 

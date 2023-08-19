@@ -7,7 +7,7 @@
 //! We utilize [tokio_rustls] for managing encrypted sessions based on `rustls`. There basic primative
 //! actors supported here are
 //!
-//! 1. [TcpListener] - A server socket listener which accepts incoming requests and calls a callback on new received sessions
+//! 1. `TcpListener` - A server socket listener which accepts incoming requests and calls a callback on new received sessions
 //! 2. [TcpSession] - An actor which manages reading and writing frames to a given socket. Can read and write concurrently through
 //! an interface actor
 //! 3. [NetworkStream] - Represents either encrypted server or client sockets or an unencrypted socket.
@@ -101,7 +101,7 @@ pub trait FrameReceiver: Send + Sync + 'static {
 /// Represents
 #[ractor::async_trait]
 pub trait SessionAcceptor: Send + Sync + 'static {
-    /// Called when a new incoming session is received by a [TcpListener] actor
+    /// Called when a new incoming session is received by a `TcpListener` actor
     async fn new_session(&self, session: NetworkStream) -> Result<(), ActorProcessingErr>;
 }
 

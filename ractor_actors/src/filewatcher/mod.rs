@@ -3,7 +3,10 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! A file watcher actor which monitors for specific paths notifying of changes
+//! A [FileWatcher] actor which monitors for specific paths notifying of changes.
+//! This watcher requires the use of the `notify` crate to monitor the host filesystem
+//! for changes.
+
 extern crate notify;
 
 use std::{collections::HashMap, path::PathBuf};
@@ -14,33 +17,39 @@ use ractor::{Actor, ActorId, ActorProcessingErr, ActorRef, RpcReplyPort};
 #[cfg(test)]
 mod tests;
 
-/// A filewatcher actor
+/// An actor which watches for file changes on the host OS. It is
+/// responsible for managing subscriptions to file changes and notifying
+/// subscribers of received changes.
 pub struct FileWatcher;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SubscriptionResult {
+    /// Subscription operation succeeded
     Ok,
+    /// There is already a subscription for the specified actor
     Duplicate,
+    /// Upon removal, this subscription was not found.
     NotFound,
 }
 
-/// File watcher messages
+/// Messages supported by the [FileWatcher] actor
 pub enum FileWatcherMessage {
-    /// A file event
+    /// A file event was received
     Event(Event),
-    /// A file-watcher error occurred, kill the actor
+    /// A file-watcher error occurred. Terminates the actor
     FwError(notify::Error),
-    /// Subscribe to file events
+    /// Subscribe the specified actor to file events using
+    /// the provided subscription logic
     Subscribe(
         ActorId,
         Box<dyn FileWatcherSubscriber>,
         RpcReplyPort<SubscriptionResult>,
     ),
-    /// Unsubscribe to file events
+    /// Unsubscribe the given actor from file events
     Unsubscribe(ActorId, RpcReplyPort<SubscriptionResult>),
 }
 
-/// File watcher subscription to events
+/// Represents a subscription to file events
 pub trait FileWatcherSubscriber: Send + 'static {
     /// Called when an [Event] is received from the file watcher
     fn event_received(&self, ev: Event);
@@ -49,12 +58,13 @@ pub trait FileWatcherSubscriber: Send + 'static {
 /// Configuration for a file watcher
 #[derive(Default)]
 pub struct FileWatcherConfig {
-    /// Files to watch
+    /// List of files to watch
     pub files: Vec<PathBuf>,
-    /// Directories to watch
+    /// List of directories to watch
     pub directories: Vec<PathBuf>,
 }
 
+/// The state of the [FileWatcher] actor
 pub struct FileWatcherState {
     watcher: Option<RecommendedWatcher>,
     subscriptions: HashMap<ActorId, Box<dyn FileWatcherSubscriber>>,

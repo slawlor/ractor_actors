@@ -3,7 +3,7 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! Cron job management, including cron supervison
+//! Cron job management, including cron supervison provided by the [CronManager] actor
 //!
 //! NOTE: We do not currently support re-spawning failed cron jobs because the
 //! [Job] trait is not cloneable. Given we're utilizing a [Box] implementation, we cannot
@@ -11,6 +11,58 @@
 //!
 //! In order to restart a failed cron job in the [CronManager], we need both a [Schedule]
 //! and a [Job] which at this time, we don't have yet.
+//!
+//! # Example usage:
+//!
+//! ```rust
+//! use std::time::Duration;
+//!
+//! use cron::Schedule;
+//! use ractor::{async_trait, Actor, ActorProcessingErr};
+//! use ractor_actors::time::cron::*;
+//!
+//! type SomeJob;
+//!
+//! #[async_trait]
+//! impl Job for SomeJob {
+//!     fn id<'a>(&self) -> &'a str {
+//!         "some_job"
+//!     }
+//!     async fn work(&mut self) -> Result<(), ActorProcessingErr> {
+//!         println!("Some job doing something");
+//!         Ok(())
+//!     }
+//! }
+//!
+//! async fn example() {
+//!     // Execute the job every 30s
+//!     let schedule = " */30    *     *         *            *          *          *";
+//!     let schedule = Schedule::from_str(schedule).expect("Failed to parse schedule");
+//!     let (manager, _mhandle) = Actor::spawn(None, CronManager, ())
+//!         .await
+//!         .expect("Failed to spawn cron manager");
+//!     
+//!     // Act & Verify
+//!     manager
+//!         .call(
+//!             |prt| {
+//!                 CronManagerMessage::Start(
+//!                     CronSettings {
+//!                         schedule,
+//!                         job: Box::new(SomeJob),
+//!                     },
+//!                     prt,
+//!                 )
+//!             },
+//!             Some(Duration::from_millis(100)),
+//!         )
+//!         .await
+//!         .expect("Failed to send start message")
+//!         .expect("Cron send timed out")
+//!         .expect("Failed to start cron job with error");
+//!     // cleanup the manager or keep it somewhere
+//! }
+//! ```
 
 use std::collections::HashMap;
 
@@ -42,11 +94,12 @@ pub struct CronSettings {
     pub job: Box<dyn Job>,
 }
 
-/// The [CronManager] is responsible for managing a pool of [Cron] jobs
+/// The [CronManager] is responsible for managing a pool of cron [Job]s
 /// and dynamically modifying the pool as needed
 pub struct CronManager;
 
-/// The state of the [CronManager] actor
+/// The state of the [CronManager] actor, containing all of the
+/// jobs to schedule
 pub struct CronManagerState {
     jobs: HashMap<String, (Schedule, ActorRef<CronMessage>)>,
 }
