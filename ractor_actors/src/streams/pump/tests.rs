@@ -4,12 +4,14 @@
 // LICENSE-MIT file in the root directory of this source tree.
 
 use ractor::call;
-use ractor::concurrency::{sleep, Duration};
+use ractor::concurrency::Duration;
 use ractor::Actor;
 use ractor::ActorProcessingErr;
 use ractor::ActorRef;
 use ractor::RpcReplyPort;
 use tokio_stream as stream;
+
+use crate::common_test::periodic_async_check;
 
 use super::spawn_stream_pump;
 
@@ -79,6 +81,7 @@ impl Actor for StreamActor {
 }
 
 #[ractor::concurrency::test]
+#[tracing_test::traced_test]
 async fn test_streaming_operation() {
     // Setup
     // Create the actor
@@ -86,14 +89,15 @@ async fn test_streaming_operation() {
         .await
         .expect("Failed to spawn non-blocking actor tree");
 
-    // Allow the background blocking operation some time to increment the parent's counter
-    sleep(Duration::from_millis(100)).await;
-
-    // Assert
-
-    // Get the count
-    let reply = call!(actor, StreamActorMessage::GetCount).expect("Failed to get count");
-    assert!(reply >= 1);
+    periodic_async_check(
+        || async {
+            // get the count
+            let reply = call!(actor, StreamActorMessage::GetCount).expect("Failed to get count");
+            reply >= 1
+        },
+        Duration::from_secs(3),
+    )
+    .await;
 
     // Cleanup
     actor.stop(None);

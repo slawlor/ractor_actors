@@ -36,3 +36,4 @@ tokio-rustls = { version = "0.23", optional = true }
 tokio = { version = "1", features = ["rt", "time", "sync", "macros", "rt-multi-thread", "signal"] }
 tracing-glog = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"]}
+tracing-test = "0.2"

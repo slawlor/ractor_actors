@@ -9,6 +9,7 @@ use ractor::concurrency::Duration;
 use ractor::RpcReplyPort;
 
 use super::*;
+use crate::common_test::periodic_async_check;
 
 struct BackgroundAdder;
 
@@ -66,6 +67,7 @@ impl Actor for TestBedActor {
 }
 
 #[ractor::concurrency::test]
+#[tracing_test::traced_test]
 async fn test_looping_operation() {
     // Setup
     // Create the actor
@@ -73,14 +75,15 @@ async fn test_looping_operation() {
         .await
         .expect("Failed to spawn non-blocking actor tree");
 
-    // Allow the background blocking operation some time to increment the parent's counter
-    sleep(Duration::from_millis(100)).await;
-
-    // Assert
-
-    // Get the count
-    let reply = call!(actor, TestBedMessage::GetCount).expect("Failed to get count");
-    assert!(reply >= 3);
+    periodic_async_check(
+        || async {
+            // get the count
+            let reply = call!(actor, TestBedMessage::GetCount).expect("Failed to get count");
+            reply >= 3
+        },
+        Duration::from_secs(3),
+    )
+    .await;
 
     // Cleanup
     actor.stop(None);

@@ -297,7 +297,9 @@ mod tests {
         },
     };
 
-    use ractor::concurrency::{sleep, Duration};
+    use ractor::concurrency::Duration;
+
+    use crate::common_test::{periodic_async_check, periodic_check};
 
     use super::*;
 
@@ -327,6 +329,7 @@ mod tests {
     }
 
     #[ractor::concurrency::test]
+    #[tracing_test::traced_test]
     async fn test_cron_lifecycle() {
         // Setup
         let schedule = " */1    *     *         *            *          *          *";
@@ -363,9 +366,11 @@ mod tests {
         assert!(result.contains_key("counter_job"));
 
         // check job is running and cron is executing
-        sleep(Duration::from_secs(4)).await;
-        assert!(counter.load(Ordering::Relaxed) >= 3);
-        assert!(counter.load(Ordering::Relaxed) < 5);
+        periodic_check(
+            || counter.load(Ordering::Relaxed) >= 3 && counter.load(Ordering::Relaxed) < 5,
+            Duration::from_secs(5),
+        )
+        .await;
 
         manager
             .cast(CronManagerMessage::Stop("counter_job".to_string()))
@@ -380,6 +385,7 @@ mod tests {
     }
 
     #[ractor::concurrency::test]
+    #[tracing_test::traced_test]
     async fn test_failing_cronjob() {
         // Setup
         let schedule = " */1    *     *         *            *          *          *";
@@ -411,13 +417,16 @@ mod tests {
             .expect("Failed to query jobs list");
         assert!(result.contains_key("bad_job"));
 
-        // check job is running and cron is executing
-        sleep(Duration::from_secs(2)).await;
-
-        // job failed on first execution so it should be removed now
-        let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
-            .expect("Failed to query jobs list");
-        assert!(!result.contains_key("bad_job"));
+        // check job has failed
+        periodic_async_check(
+            || async {
+                let result = ractor::call_t!(manager, CronManagerMessage::ListJobs, 100)
+                    .expect("Failed to query jobs list");
+                !result.contains_key("bad_job")
+            },
+            Duration::from_secs(4),
+        )
+        .await;
 
         // Cleanup
         manager.stop(None);
@@ -425,6 +434,7 @@ mod tests {
     }
 
     #[ractor::concurrency::test]
+    #[tracing_test::traced_test]
     async fn test_cron_event_subscription() {
         // Setup
         let schedule = " */1    *     *         *            *          *          *";
@@ -504,18 +514,26 @@ mod tests {
             .expect("Cron send timed out")
             .expect("Failed to start cron job with error");
 
-        sleep(Duration::from_secs(2)).await;
+        periodic_check(
+            || {
+                start_counter.load(Ordering::Relaxed) == 2
+                    && fail_counter.load(Ordering::Relaxed) == 1
+            },
+            Duration::from_secs(5),
+        )
+        .await;
+
         manager
             .cast(CronManagerMessage::Stop("counter_job".to_string()))
             .expect("Failed to send stop command");
-        sleep(Duration::from_millis(500)).await;
+        periodic_check(
+            || stop_counter.load(Ordering::Relaxed) == 1,
+            Duration::from_secs(5),
+        )
+        .await;
+
         // cleanup cron manager
         manager.stop(None);
         mhandle.await.unwrap();
-
-        // Assert
-        assert_eq!(2, start_counter.load(Ordering::Relaxed));
-        assert_eq!(1, fail_counter.load(Ordering::Relaxed));
-        assert_eq!(1, stop_counter.load(Ordering::Relaxed));
     }
 }

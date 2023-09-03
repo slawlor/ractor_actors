@@ -44,3 +44,6 @@ pub mod time;
 
 #[cfg(feature = "streams")]
 pub mod streams;
+
+#[cfg(test)]
+pub(crate) mod common_test;
