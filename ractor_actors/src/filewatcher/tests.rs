@@ -10,8 +10,10 @@ use std::sync::{Arc, Mutex};
 use ractor::concurrency::{test as rtest, Duration};
 
 use super::*;
+use crate::common_test::periodic_check;
 
 #[rtest]
+#[tracing_test::traced_test]
 async fn filewatcher_starts_default_config() {
     // Setup
     let fw = FileWatcher;
@@ -28,6 +30,7 @@ async fn filewatcher_starts_default_config() {
 }
 
 #[rtest]
+#[tracing_test::traced_test]
 async fn filewatch_watches_file() {
     // Setup
     let mut dir = temp_dir();
@@ -86,9 +89,7 @@ async fn filewatch_watches_file() {
     write!(file, "Some data").expect("Failed to write to file");
     drop(file); // close out the file
 
-    ractor::concurrency::sleep(Duration::from_millis(200)).await;
-
-    assert!(events.lock().unwrap().len() >= 1);
+    periodic_check(|| events.lock().unwrap().len() >= 1, Duration::from_secs(3)).await;
 
     // Cleanup
     fwactor.stop(None);

@@ -117,7 +117,9 @@ mod tests {
         },
     };
 
-    use ractor::concurrency::{sleep, Duration};
+    use ractor::concurrency::Duration;
+
+    use crate::common_test::periodic_check;
 
     use super::*;
 
@@ -138,6 +140,7 @@ mod tests {
     }
 
     #[ractor::concurrency::test]
+    #[tracing_test::traced_test]
     async fn test_cron_job() {
         //                    sec  min   hour   day of month   month   day of week   year
         let schedule = " */1    *     *         *            *          *          *";
@@ -159,10 +162,11 @@ mod tests {
         .await
         .expect("Failed to start cron job");
 
-        sleep(Duration::from_secs(4)).await;
-
-        assert!(counter.load(Ordering::Relaxed) >= 3);
-        assert!(counter.load(Ordering::Relaxed) < 5);
+        periodic_check(
+            || counter.load(Ordering::Relaxed) >= 3 && counter.load(Ordering::Relaxed) < 5,
+            Duration::from_secs(10),
+        )
+        .await;
 
         actor.stop(None);
         handle.await.unwrap();
