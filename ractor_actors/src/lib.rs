@@ -10,9 +10,10 @@
 //! There are multiple actors and more will follow as time progresses, however at the time
 //! of this writing this crate includes
 //!
-//! 1. Basic TCP functionality
-//! 2. Filewatcher
-//! 3. Cron job management
+//! 1. Basic TCP functionality ([net])
+//! 2. Filewatcher ([filewatcher])
+//! 3. Cron job management ([time])
+//! 4. Stream processing (infinite/finite loop/stream processing, stream multiplexing, etc) ([streams])
 //!
 //! NOTE: This crate is still a work-in-progress and more functionality will be
 //! added as time progresses

@@ -1,4 +1,5 @@
-# Contributing to this library
+# Contributing to ractor_actors
+
 We want to make contributing to this project as easy and transparent as
 possible.
 
@@ -17,7 +18,7 @@ We actively welcome your pull requests!
 
 ## Issues
 
-We use GitHub issues to track issues. 
+We use GitHub issues to track issues.
 
 For reported bugs, please ensure your description is clear and has sufficient instructions to be able to reproduce the issue.
 
@@ -25,5 +26,5 @@ For feature requests, please try to be detailed in what you'd like to see so we 
 
 ## License
 
-By contributing to `ractor`, you agree that your contributions will be
+By contributing to `ractor_actors`, you agree that your contributions will be
 licensed under the LICENSE file in the root directory of this source tree.
