@@ -13,7 +13,7 @@ A pure-Rust actor framework. Inspired from [Erlang's `gen_server`](https://www.e
 * [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-ractor_actors-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/ractor_actors)
 * [![CI/main](https://github.com/slawlor/ractor_actors/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/slawlor/ractor_actors/actions/workflows/ci.yaml)
 * [![codecov](https://codecov.io/gh/slawlor/ractor_actors/branch/main/graph/badge.svg?token=61AGYYPWBA)](https://codecov.io/gh/slawlor/ractor_actors)
-* `ractor_actor`: ![ractor_actor Downloads](https://img.shields.io/crates/d/ractor_actors.svg)
+* `ractor_actors`: ![ractor_actor Downloads](https://img.shields.io/crates/d/ractor_actors.svg)
 
 This crate contains some utility actors for Ractor-based systems. Additionally because `ractor` is built on `tokio`,
 you can often intermingle these utility actors with non-actor async workflows.
