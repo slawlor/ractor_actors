@@ -17,8 +17,9 @@ filewatcher = ["notify"]
 net = ["tokio/net", "tokio/io-util", "tokio/macros", "tokio-rustls"]
 time = ["chrono", "cron"]
 streams = ["tokio-stream"]
+sync = []
 
-default = ["filewatcher", "net", "time", "streams"]
+default = ["filewatcher", "net", "time", "streams", "sync"]
 
 [dependencies]
 # Required dependencies
