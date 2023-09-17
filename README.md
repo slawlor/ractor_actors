@@ -24,7 +24,7 @@ you can often intermingle these utility actors with non-actor async workflows.
 
 ```toml
 [dependencies]
-ractor_actors = "0.1"
+ractor_actors = "0.2"
 ```
 
 ## What's here?
