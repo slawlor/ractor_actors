@@ -6,6 +6,7 @@
 //! Streaming utilities built off of [ractor] actors. This includes building a looped
 //! operation (see [looping]) and actors which process streams (see: [pump] and [mux]).
 
+pub mod coordinator;
 pub mod looping;
 pub mod mux;
 pub mod pump;

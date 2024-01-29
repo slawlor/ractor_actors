@@ -29,6 +29,10 @@ where
     encryption: IncomingEncryptionMode,
 }
 
+/// Arguments for starting a TCP Listener actor. Required
+/// to provide the port ([super::NetworkPort]), the encryption
+/// settings ([IncomingEncryptionMode]), and what to do with
+/// accepted sockets via a [SessionAcceptor] definition.
 pub struct TcpListenerStartupArgs<R>
 where
     R: SessionAcceptor,
@@ -38,6 +42,7 @@ where
     acceptor: R,
 }
 
+/// No-op message for proceeding with TCP accept operations
 pub struct ListenerMessage;
 
 #[ractor::async_trait]

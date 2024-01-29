@@ -34,6 +34,9 @@
 //! ```
 //!
 
+#![deny(missing_docs)]
+#![deny(warnings)]
+
 #[cfg(feature = "filewatcher")]
 pub mod filewatcher;
 

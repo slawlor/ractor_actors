@@ -22,6 +22,7 @@ mod tests;
 /// subscribers of received changes.
 pub struct FileWatcher;
 
+/// The result of a subscribe to file watching events
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum SubscriptionResult {
     /// Subscription operation succeeded
