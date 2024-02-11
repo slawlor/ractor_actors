@@ -45,12 +45,30 @@ where
 }
 
 /// A tcp-session management actor
-#[derive(Default)]
 pub struct TcpSession<R>
 where
     R: FrameReceiver,
 {
     _r: PhantomData<R>,
+}
+
+impl<R> Default for TcpSession<R>
+where
+    R: FrameReceiver,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<R> TcpSession<R>
+where
+    R: FrameReceiver,
+{
+    /// Create a new TcpSession actor instance
+    pub fn new() -> Self {
+        Self { _r: PhantomData }
+    }
 }
 
 #[ractor::async_trait]
