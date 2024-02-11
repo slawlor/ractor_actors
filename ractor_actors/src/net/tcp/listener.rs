@@ -50,13 +50,17 @@ where
     encryption: IncomingEncryptionMode,
 }
 
-pub struct TcpListenerStartupArgs<R>
+/// Arguments to startup a TcpListener
+pub struct ListenerStartupArgs<R>
 where
     R: SessionAcceptor,
 {
-    port: super::NetworkPort,
-    encryption: IncomingEncryptionMode,
-    acceptor: R,
+    /// Port to listen on
+    pub port: super::NetworkPort,
+    /// Encryption settings for incoming sockets
+    pub encryption: IncomingEncryptionMode,
+    /// Callback module for accepted sockets
+    pub acceptor: R,
 }
 
 pub struct ListenerMessage;
@@ -67,7 +71,7 @@ where
     R: SessionAcceptor,
 {
     type Msg = ListenerMessage;
-    type Arguments = TcpListenerStartupArgs<R>;
+    type Arguments = ListenerStartupArgs<R>;
     type State = ListenerState<R>;
 
     async fn pre_start(
