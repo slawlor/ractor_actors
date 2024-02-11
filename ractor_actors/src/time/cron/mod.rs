@@ -309,6 +309,7 @@ mod tests {
         fn id<'a>(&self) -> &'a str {
             "bad_job"
         }
+        #[allow(clippy::diverging_sub_expression)]
         async fn work(&mut self) -> Result<(), ActorProcessingErr> {
             panic!("Boom!");
         }

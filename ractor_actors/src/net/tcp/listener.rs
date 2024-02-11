@@ -14,9 +14,30 @@ use tokio::net::TcpListener;
 use super::{IncomingEncryptionMode, SessionAcceptor};
 
 /// A Tcp Socket [Listener] responsible for accepting new connections.
-#[derive(Default)]
-pub struct Listener<R> {
+pub struct Listener<R>
+where
+    R: SessionAcceptor,
+{
     _r: PhantomData<R>,
+}
+
+impl<R> Default for Listener<R>
+where
+    R: SessionAcceptor,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<R> Listener<R>
+where
+    R: SessionAcceptor,
+{
+    /// Create a new TCP Listener actor
+    pub fn new() -> Self {
+        Self { _r: PhantomData }
+    }
 }
 
 /// The Node listener's state
