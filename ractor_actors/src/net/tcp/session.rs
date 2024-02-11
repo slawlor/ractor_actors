@@ -40,8 +40,10 @@ pub struct TcpSessionStartupArguments<R>
 where
     R: FrameReceiver,
 {
-    receiver: R,
-    tcp_session: NetworkStream,
+    /// The callback implementation for received for messages
+    pub receiver: R,
+    /// The tcp session to creat the sesson upon
+    pub tcp_session: NetworkStream,
 }
 
 /// A tcp-session management actor
