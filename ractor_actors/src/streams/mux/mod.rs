@@ -223,9 +223,9 @@ where
         message: SupervisionEvent,
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        if let SupervisionEvent::ActorPanicked(_who, what) = message {
+        if let SupervisionEvent::ActorFailed(_who, what) = message {
             // bubble up panics, but not child exits (we may still be processing when the child stream pump stops)
-            return Err(ractor::ActorErr::Panic(what).into());
+            return Err(ractor::ActorErr::Failed(what).into());
         }
         Ok(())
     }
