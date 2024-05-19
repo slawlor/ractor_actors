@@ -239,7 +239,7 @@ impl Actor for CronManager {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match evt {
-            SupervisionEvent::ActorPanicked(who, what) => {
+            SupervisionEvent::ActorFailed(who, what) => {
                 let job = state
                     .jobs
                     .iter()
