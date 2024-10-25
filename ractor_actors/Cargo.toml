@@ -1,6 +1,6 @@
 [package]
 name = "ractor_actors"
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Sean Lawlor"]
 description = "Helpful actors built with Ractor"
 documentation = "https://docs.rs/ractor_actors"
@@ -23,7 +23,7 @@ default = ["filewatcher", "net", "time", "streams", "sync"]
 
 [dependencies]
 # Required dependencies
-ractor = { version = "0.12" }
+ractor = { version = "0.13" }
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"
 # Feature-specific dependencies
