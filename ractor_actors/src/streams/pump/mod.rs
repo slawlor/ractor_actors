@@ -94,10 +94,10 @@ where
 /// * `stream`: The stream of `Item`s to process
 /// * `receiver`: The actor who will receive outputs from the stream
 /// * `fn_map`: Mapping function to convert a `S::Item` to the input message for the recipient actor.
-/// In the event the stream type is a sub-value of the message enum of the actor, this can be used
-/// to map to the right sub-message type
+///   In the event the stream type is a sub-value of the message enum of the actor, this can be used
+///   to map to the right sub-message type
 /// * `supervisor`: (Optional) If the receiver is **not** the supervisor, a separate supervisor can be
-/// provided here
+///   provided here
 ///
 /// Returns the [ActorCell] for the underlying stream pump actor upon successful startup, or a [SpawnErr] if the
 /// underlying actor failed to spawn.

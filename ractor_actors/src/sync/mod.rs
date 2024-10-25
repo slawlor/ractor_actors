@@ -6,6 +6,6 @@
 //! Synchronization primative actors. Contained is
 //!
 //! * [broadcast::Broadcaster] - a broadcast actor which will take inputs
-//! and forward them to downstream targets.
+//!   and forward them to downstream targets.
 
 pub mod broadcast;

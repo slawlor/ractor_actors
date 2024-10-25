@@ -14,7 +14,7 @@
 //! 2. Takes a series of targets as inputs as well
 //! 3. Use the stream pump to convert the stream to actor messages
 //! 4. If a target fails, it will remove the target, notify of the failure,
-//! and continue processing the stream for the other targets
+//!    and continue processing the stream for the other targets
 //! 5. Upon EOF for the stream, kill the actor cleanly, and cleanup downstream targets
 //!
 
@@ -87,9 +87,9 @@ where
 /// which controlls the entire setting.
 ///
 /// * `config` - The stream mutiplex configuration. See [StreamMuxConfiguration] for the full
-/// collection of arguments
+///   collection of arguments
 /// * `sup` - (Optional) The supervisor for the underlying actor. If you wish to use the supervision
-/// flow, this will connect the supervision flow for you
+///   flow, this will connect the supervision flow for you
 ///
 /// Returns [Ok(ActorCell)] signifying the underlying actor instance that was started upon successful
 /// start, [Err(SpawnErr)] if the actor fails to start (or the inner stream-pump fails to start).

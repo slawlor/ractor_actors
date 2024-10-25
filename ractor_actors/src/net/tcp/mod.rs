@@ -9,10 +9,10 @@
 //!
 //! 1. `TcpListener` - A server socket listener which accepts incoming requests and calls a callback on new received sessions
 //! 2. [TcpSession] - An actor which manages reading and writing frames to a given socket. Can read and write concurrently through
-//! an interface actor
+//!    an interface actor
 //! 3. [NetworkStream] - Represents either encrypted server or client sockets or an unencrypted socket.
 //! 4. [FrameReceiver] - An implementation of this trait must be provided to the [TcpSession] in order to handle/decode incoming frames of
-//! messages.
+//!    messages.
 
 pub mod listener;
 pub mod session;
