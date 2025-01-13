@@ -143,7 +143,7 @@ where
     continue_with_dead_targets: bool,
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl<T> Actor for Broadcaster<T>
 where
     T: ractor::Message + Clone,

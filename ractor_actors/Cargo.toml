@@ -1,11 +1,11 @@
 [package]
 name = "ractor_actors"
-version = "0.4.7"
+version = "0.4.8"
 authors = ["Sean Lawlor"]
 description = "Helpful actors built with Ractor"
 documentation = "https://docs.rs/ractor_actors"
 license = "MIT"
-edition = "2018"
+edition = "2021"
 keywords = ["actor", "ractor"]
 repository = "https://github.com/slawlor/ractor"
 readme = "../README.md"
@@ -15,18 +15,20 @@ categories = ["asynchronous"]
 [features]
 filewatcher = ["notify"]
 net = ["tokio/net", "tokio/io-util", "tokio/macros", "tokio-rustls"]
-time = ["chrono", "cron"]
-streams = ["tokio-stream"]
+time = ["chrono", "cron", "dep:async-trait"]
+streams = ["tokio-stream", "dep:async-trait"]
 sync = []
+async-trait = ["dep:async-trait", "ractor/async-trait"]
 
 default = ["filewatcher", "net", "time", "streams", "sync"]
 
 [dependencies]
 # Required dependencies
-ractor = { version = "0.14", features = ["async-trait"] }
+ractor = { version = "0.14" }
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"
 # Feature-specific dependencies
+async-trait = { version = "0.1", optional = true }
 chrono = { version = "0.4", optional = true }
 cron = { version = "0.12", optional = true }
 tokio-stream = { version = "0.1", optional = true }

@@ -18,7 +18,7 @@ pub struct Listener<R>
 where
     R: SessionAcceptor,
 {
-    _r: PhantomData<R>,
+    _r: PhantomData<fn() -> R>,
 }
 
 impl<R> Default for Listener<R>
@@ -65,7 +65,7 @@ where
 
 pub struct ListenerMessage;
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl<R> Actor for Listener<R>
 where
     R: SessionAcceptor,

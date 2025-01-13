@@ -37,7 +37,7 @@ pub enum CronMessage {
     UpdateSchedule(Schedule),
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for Cron {
     type Msg = CronMessage;
     type State = CronState;
@@ -127,7 +127,7 @@ mod tests {
         counter: Arc<AtomicU16>,
     }
 
-    #[ractor::async_trait]
+    #[async_trait::async_trait]
     impl Job for TestJob {
         fn id<'a>(&self) -> &'a str {
             "test_job"

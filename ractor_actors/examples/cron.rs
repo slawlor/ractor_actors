@@ -17,7 +17,6 @@ use std::str::FromStr;
 
 use cron::Schedule;
 use ractor::{
-    async_trait,
     concurrency::{sleep, Duration, Instant},
     Actor, ActorProcessingErr,
 };
@@ -27,7 +26,7 @@ struct MyJob {
     last: Option<Instant>,
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl Job for MyJob {
     fn id<'a>(&self) -> &'a str {
         "my_job"

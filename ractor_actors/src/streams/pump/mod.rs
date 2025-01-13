@@ -62,7 +62,7 @@ where
 {
 }
 
-#[ractor::async_trait]
+#[async_trait::async_trait]
 impl<S, T, F> Operation for Streamer<S, T, F>
 where
     S: Stream + ractor::State,

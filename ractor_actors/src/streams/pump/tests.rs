@@ -22,7 +22,7 @@ enum StreamActorMessage {
     Add(u64),
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for StreamActor {
     type Msg = StreamActorMessage;
     type State = u64;

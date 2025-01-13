@@ -13,7 +13,7 @@ use crate::common_test::periodic_async_check;
 
 struct BackgroundAdder;
 
-#[ractor::async_trait]
+#[async_trait::async_trait]
 impl Operation for BackgroundAdder {
     type State = ActorRef<TestBedMessage>;
 
@@ -31,7 +31,7 @@ enum TestBedMessage {
     Add(u64),
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for TestBedActor {
     type Msg = TestBedMessage;
     type State = u64;
