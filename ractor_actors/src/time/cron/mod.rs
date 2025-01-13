@@ -19,12 +19,12 @@
 //! use std::time::Duration;
 //!
 //! use cron::Schedule;
-//! use ractor::{async_trait, Actor, ActorProcessingErr};
+//! use ractor::{Actor, ActorProcessingErr};
 //! use ractor_actors::time::cron::*;
 //!
 //! struct SomeJob;
 //!
-//! #[async_trait]
+//! #[async_trait::async_trait]
 //! impl Job for SomeJob {
 //!     fn id<'a>(&self) -> &'a str {
 //!         "some_job"
@@ -78,7 +78,7 @@ use worker::{Cron, CronMessage};
 ///
 /// If the job takes longer than the period, queueing may occur and the
 /// job may violate scheduling
-#[ractor::async_trait]
+#[async_trait::async_trait]
 pub trait Job: State {
     /// Retrieve the name of the cron job for logging
     fn id<'a>(&self) -> &'a str;
@@ -137,7 +137,7 @@ pub enum CronManagerMessage {
     Unsubscribe(ActorId),
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for CronManager {
     type Msg = CronManagerMessage;
     type State = CronManagerState;
@@ -304,7 +304,7 @@ mod tests {
     use super::*;
 
     struct BadJob;
-    #[ractor::async_trait]
+    #[async_trait::async_trait]
     impl Job for BadJob {
         fn id<'a>(&self) -> &'a str {
             "bad_job"
@@ -318,7 +318,7 @@ mod tests {
     struct CounterJob {
         counter: Arc<AtomicU16>,
     }
-    #[ractor::async_trait]
+    #[async_trait::async_trait]
     impl Job for CounterJob {
         fn id<'a>(&self) -> &'a str {
             "counter_job"

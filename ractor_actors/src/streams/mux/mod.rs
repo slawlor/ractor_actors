@@ -149,7 +149,7 @@ where
 {
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl<S, N> Actor for MuxActor<S, N>
 where
     S: Stream + ractor::State,

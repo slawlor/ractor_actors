@@ -17,6 +17,9 @@ jobs:
           - name: Run the default tests
             package: ractor_actors
             # flags: 
+          - name: Run the default tests with async-trait based actors
+            package: ractor_actors
+            flags: -F async-trait
             
     steps:
       - uses: actions/checkout@main

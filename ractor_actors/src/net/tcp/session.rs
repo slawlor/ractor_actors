@@ -51,7 +51,7 @@ pub struct TcpSession<R>
 where
     R: FrameReceiver,
 {
-    _r: PhantomData<R>,
+    _r: PhantomData<fn() -> R>,
 }
 
 impl<R> Default for TcpSession<R>
@@ -73,7 +73,7 @@ where
     }
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl<R> Actor for TcpSession<R>
 where
     R: FrameReceiver,
@@ -301,7 +301,7 @@ enum SessionWriterMessage {
     Write(Frame),
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for SessionWriter {
     type Msg = SessionWriterMessage;
     type Arguments = ActorWriteHalf;
@@ -384,7 +384,7 @@ struct SessionReaderState {
     reader: Option<ActorReadHalf>,
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for SessionReader {
     type Msg = SessionReaderMessage;
     type Arguments = ActorReadHalf;

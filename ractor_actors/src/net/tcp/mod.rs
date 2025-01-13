@@ -92,16 +92,32 @@ pub enum IncomingEncryptionMode {
 }
 
 /// Represents a receiver of frames of data
-#[ractor::async_trait]
-pub trait FrameReceiver: Send + Sync + 'static {
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
+pub trait FrameReceiver: ractor::State {
     /// Called when a frame is received by the [TcpSession] actor
+    #[cfg(not(feature = "async-trait"))]
+    fn frame_ready(
+        &self,
+        f: Frame,
+    ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
+
+    /// Called when a frame is received by the [TcpSession] actor
+    #[cfg(feature = "async-trait")]
     async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr>;
 }
 
 /// Represents
-#[ractor::async_trait]
-pub trait SessionAcceptor: Send + Sync + 'static {
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
+pub trait SessionAcceptor: ractor::State {
     /// Called when a new incoming session is received by a `TcpListener` actor
+    #[cfg(not(feature = "async-trait"))]
+    fn new_session(
+        &self,
+        session: NetworkStream,
+    ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
+
+    /// Called when a new incoming session is received by a `TcpListener` actor
+    #[cfg(feature = "async-trait")]
     async fn new_session(&self, session: NetworkStream) -> Result<(), ActorProcessingErr>;
 }
 

@@ -18,7 +18,7 @@
 //!
 //! struct SampleOperation;
 //!
-//! #[ractor::async_trait]
+//! #[async_trait::async_trait]
 //! impl Operation for SampleOperation {
 //!     type State = ();
 //!
@@ -58,7 +58,7 @@ pub enum IterationResult {
 /// either (a) shutdown ([IterationResult::End]) or (b) error. This could be processing a stream
 /// request or some continuous polling operation (something like a configuration element,
 /// which emits signals when the config changes)
-#[ractor::async_trait]
+#[async_trait::async_trait]
 pub trait Operation: ractor::State + Sync {
     /// The state of the looping operation. It is bound to the internal actor's [Actor::State]
     /// but doesn't require specifying all of the inner actor properties
@@ -76,14 +76,10 @@ struct Loop<T>
 where
     T: Operation,
 {
-    _t: PhantomData<T>,
+    _t: PhantomData<fn() -> T>,
 }
 
-// SAFETY: `T` is only present as PhantomData, so it doesn't actually affect if the
-// [LoopActor] is Sync across thread boundaries.
-unsafe impl<T> Sync for Loop<T> where T: Operation {}
-
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl<TOperation> Actor for Loop<TOperation>
 where
     TOperation: Operation,

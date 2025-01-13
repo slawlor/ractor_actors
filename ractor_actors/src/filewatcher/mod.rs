@@ -70,7 +70,7 @@ pub struct FileWatcherState {
     subscriptions: HashMap<ActorId, Box<dyn FileWatcherSubscriber>>,
 }
 
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for FileWatcher {
     type Msg = FileWatcherMessage;
     type State = FileWatcherState;

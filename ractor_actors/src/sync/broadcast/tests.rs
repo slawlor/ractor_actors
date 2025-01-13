@@ -16,7 +16,7 @@ use super::*;
 type TestMessage = u32;
 
 struct HappyActor;
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for HappyActor {
     type Msg = TestMessage;
     type State = Arc<AtomicU32>;
@@ -42,7 +42,7 @@ impl Actor for HappyActor {
 }
 
 struct BoomActor;
-#[ractor::async_trait]
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for BoomActor {
     type Msg = TestMessage;
     type State = Arc<AtomicU32>;
