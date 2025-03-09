@@ -42,7 +42,7 @@ where
 {
     /// The callback implementation for received for messages
     pub receiver: R,
-    /// The tcp session to creat the sesson upon
+    /// The tcp session to creat the session upon
     pub tcp_session: NetworkStream,
 }
 
