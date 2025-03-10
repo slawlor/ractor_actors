@@ -5,14 +5,14 @@
 
 //! TCP Server to accept incoming sessions
 
-use ractor::ActorProcessingErr;
 use ractor::{Actor, ActorRef};
+use ractor::{ActorCell, ActorProcessingErr};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use super::{IncomingEncryptionMode, NetworkStream};
+use super::{IncomingEncryptionMode, NetworkStreamInfo, Session, SessionMessage};
 
 /// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
 /// a client connects, the `on_connection` will be called. The callback should create a new
@@ -22,32 +22,39 @@ use super::{IncomingEncryptionMode, NetworkStream};
 /// logging connects and disconnects.
 pub struct Listener {
     port: super::NetworkPort,
-    on_connection: Arc<
+    encryption: IncomingEncryptionMode,
+
+    spawn_handler: Arc<
         dyn Fn(
-                NetworkStream,
-            ) -> Pin<Box<dyn Future<Output = Result<(), ActorProcessingErr>> + Send>>
-            + Send
+                ActorCell,
+                NetworkStreamInfo,
+            ) -> Pin<
+                Box<
+                    dyn Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>>
+                        + Send,
+                >,
+            > + Send
             + Sync,
     >,
-
-    encryption: IncomingEncryptionMode,
 }
 
 impl Listener {
     /// Create a new `Listener`
     pub fn new<F, Fut>(
         port: super::NetworkPort,
-        on_connection: F,
         encryption: IncomingEncryptionMode,
+        spawn_handler: F,
     ) -> Self
     where
-        F: Fn(NetworkStream) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<(), ActorProcessingErr>> + Send + 'static,
+        F: Fn(ActorCell, NetworkStreamInfo) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>> + Send + 'static,
     {
         Self {
             port,
-            on_connection: Arc::new(move |stream| Box::pin(on_connection(stream))),
             encryption,
+            spawn_handler: Arc::new(move |cell: ActorCell, info: NetworkStreamInfo| {
+                Box::pin(spawn_handler(cell, info))
+            }),
         }
     }
 }
@@ -133,7 +140,17 @@ impl Actor for Listener {
                     };
 
                     if let Some(stream) = session {
-                        let _ = (self.on_connection)(stream).await?;
+                        let _ = Actor::spawn_linked(
+                            Some(addr.to_string()),
+                            Session {
+                                spawn_handler: self.spawn_handler.clone(),
+                                peer_addr: stream.peer_addr(),
+                                local_addr: stream.local_addr(),
+                            },
+                            stream,
+                            myself.get_cell(),
+                        )
+                        .await?;
                         tracing::info!("TCP Session opened for {addr}");
                     }
                 }

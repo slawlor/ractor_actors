@@ -7,15 +7,17 @@
 
 // TODO: RUSTLS + Tokio : https://github.com/tokio-rs/tls/blob/master/tokio-rustls/examples/server/src/main.rs
 
+use crate::net::tcp::{Frame, NetworkStreamInfo};
+use ractor::{Actor, ActorProcessingErr, ActorRef};
+use ractor::{ActorCell, SupervisionEvent};
+use std::future::Future;
 use std::net::SocketAddr;
-
-use ractor::{Actor, ActorCell, ActorProcessingErr, ActorRef};
-use ractor::{SpawnErr, SupervisionEvent};
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::io::ErrorKind;
 use tokio::io::{AsyncReadExt, ReadHalf, WriteHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
-use crate::net::tcp::Frame;
 
 /// Helper method to read exactly `len` bytes from the stream into a pre-allocated buffer
 /// of bytes
@@ -51,41 +53,20 @@ async fn read_n_bytes(stream: &mut ActorReadHalf, len: usize) -> Result<Vec<u8>,
 /// The [Session] actor supervises two child actors, [SessionReader] and [SessionWriter]. Should
 /// either the reader or writer exit, they will terminate the entire session.
 pub struct Session {
-    pub handler: ActorRef<SessionMessage>,
+    pub spawn_handler: Arc<
+        dyn Fn(
+                ActorCell,
+                NetworkStreamInfo,
+            ) -> Pin<
+                Box<
+                    dyn Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>>
+                        + Send,
+                >,
+            > + Send
+            + Sync,
+    >,
     pub peer_addr: SocketAddr,
     pub local_addr: SocketAddr,
-}
-
-impl Session {
-    pub async fn spawn_linked(
-        handler: ActorRef<SessionMessage>,
-        stream: super::NetworkStream,
-        peer_addr: SocketAddr,
-        local_addr: SocketAddr,
-        supervisor: ActorCell,
-    ) -> Result<ActorRef<SessionMessage>, SpawnErr> {
-        match Actor::spawn_linked(
-            None,
-            Session {
-                handler,
-                peer_addr,
-                local_addr,
-            },
-            stream,
-            supervisor,
-        )
-            .await
-        {
-            Err(err) => {
-                tracing::error!("Failed to spawn session writer actor: {err}");
-                Err(err)
-            }
-            Ok((a, _)) => {
-                // return the actor handle
-                Ok(a)
-            }
-        }
-    }
 }
 
 /// The connection messages
@@ -99,6 +80,7 @@ pub enum SessionMessage {
 
 /// The session's state
 pub struct SessionState {
+    handler: ActorRef<SessionMessage>,
     writer: ActorRef<SessionWriterMessage>,
     reader: ActorRef<SessionReaderMessage>,
 }
@@ -114,6 +96,8 @@ impl Actor for Session {
         myself: ActorRef<Self::Msg>,
         stream: super::NetworkStream,
     ) -> Result<Self::State, ActorProcessingErr> {
+        let info = stream.info();
+
         let (read, write) = match stream {
             super::NetworkStream::Raw { stream, .. } => {
                 let (read, write) = stream.into_split();
@@ -147,9 +131,16 @@ impl Actor for Session {
             read,
             myself.get_cell(),
         )
-            .await?;
+        .await?;
 
-        Ok(Self::State { writer, reader })
+        let spawn_handler = &self.spawn_handler.clone();
+        let handler = spawn_handler(myself.get_cell(), info).await?;
+
+        Ok(Self::State {
+            handler,
+            writer,
+            reader,
+        })
     }
 
     async fn post_stop(
@@ -182,9 +173,7 @@ impl Actor for Session {
                     self.local_addr,
                     self.peer_addr,
                 );
-                let _ = self
-                    .handler
-                    .cast(SessionMessage::FrameAvailable(msg));
+                let _ = state.handler.cast(SessionMessage::FrameAvailable(msg));
             }
         }
         Ok(())

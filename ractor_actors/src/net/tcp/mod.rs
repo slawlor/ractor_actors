@@ -52,9 +52,21 @@ pub enum NetworkStream {
     },
 }
 
+pub struct NetworkStreamInfo {
+    pub peer_addr: SocketAddr,
+    pub local_addr: SocketAddr,
+}
+
 impl NetworkStream {
+    fn info(&self) -> NetworkStreamInfo {
+        NetworkStreamInfo{
+            peer_addr: self.peer_addr(),
+            local_addr: self.local_addr(),
+        }
+    }
+
     /// Retrieve the peer (other) socket address
-    pub fn peer_addr(&self) -> SocketAddr {
+    fn peer_addr(&self) -> SocketAddr {
         match self {
             Self::Raw { peer_addr, .. } => *peer_addr,
             Self::TlsServer { peer_addr, .. } => *peer_addr,
@@ -63,7 +75,7 @@ impl NetworkStream {
     }
 
     /// Retrieve the local socket address
-    pub fn local_addr(&self) -> SocketAddr {
+    fn local_addr(&self) -> SocketAddr {
         match self {
             Self::Raw { local_addr, .. } => *local_addr,
             Self::TlsServer { local_addr, .. } => *local_addr,
