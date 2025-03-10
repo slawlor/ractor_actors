@@ -14,11 +14,12 @@ use tokio::net::TcpListener;
 
 use super::{IncomingEncryptionMode, NetworkStream};
 
-/// A Tcp Socket [Listener] responsible for accepting new connections and spawning [super::session::Session]s
-/// which handle the message sending and receiving over the socket.
+/// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
+/// a client connects, the `on_connection` will be called. The callback should create a new
+/// [super::session::Session]s which handle the message sending and receiving over the socket.
 ///
-/// The [Listener] supervises all of the TCP [super::session::Session] actors and is responsible for logging
-/// connects and disconnects as well as tracking the current open [super::session::Session] actors.
+/// The [Listener] supervises all the TCP [super::session::Session] actors and is responsible for
+/// logging connects and disconnects.
 pub struct Listener {
     port: super::NetworkPort,
     on_connection: Arc<
@@ -51,7 +52,7 @@ impl Listener {
     }
 }
 
-/// The Node listener's state
+/// The Listener's state
 pub struct ListenerState {
     listener: Option<TcpListener>,
 }
@@ -137,7 +138,7 @@ impl Actor for Listener {
                     }
                 }
                 Err(socket_accept_error) => {
-                    tracing::warn!("Error accepting socket {socket_accept_error} on Node server");
+                    tracing::warn!("Error accepting socket {socket_accept_error}");
                 }
             }
         }

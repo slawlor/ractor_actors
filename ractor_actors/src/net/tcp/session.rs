@@ -3,7 +3,7 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! TCP session actor which is managing the specific communication to a node
+//! TCP session actor which is managing the communication on a single socket.
 
 // TODO: RUSTLS + Tokio : https://github.com/tokio-rs/tls/blob/master/tokio-rustls/examples/server/src/main.rs
 
@@ -44,9 +44,9 @@ async fn read_n_bytes(stream: &mut ActorReadHalf, len: usize) -> Result<Vec<u8>,
     Ok(buf)
 }
 
-// ========================= Node Session actor ========================= //
+// =========================== Session actor =========================== //
 
-/// Represents a bi-directional tcp connection along with send + receive operations
+/// Represents a bidirectional tcp connection along with send + receive operations
 ///
 /// The [Session] actor supervises two child actors, [SessionReader] and [SessionWriter]. Should
 /// either the reader or writer exit, they will terminate the entire session.
@@ -88,16 +88,16 @@ impl Session {
     }
 }
 
-/// The node connection messages
+/// The connection messages
 pub enum SessionMessage {
     /// Send a message over the channel
     Send(Frame),
 
-    /// An object was received on the channel
+    /// A frame was received on the channel
     FrameAvailable(Frame),
 }
 
-/// The node session's state
+/// The session's state
 pub struct SessionState {
     writer: ActorRef<SessionWriterMessage>,
     reader: ActorRef<SessionReaderMessage>,
@@ -174,7 +174,7 @@ impl Actor for Session {
                     self.local_addr,
                     self.peer_addr
                 );
-                let _ = state.writer.cast(SessionWriterMessage::WriteObject(msg));
+                let _ = state.writer.cast(SessionWriterMessage::WriteFrame(msg));
             }
             Self::Msg::FrameAvailable(msg) => {
                 tracing::debug!(
@@ -227,7 +227,7 @@ impl Actor for Session {
     }
 }
 
-// ========================= Node Session writer ========================= //
+// =========================== Session writer =========================== //
 
 enum ActorWriteHalf {
     ServerTls(WriteHalf<tokio_rustls::server::TlsStream<TcpStream>>),
@@ -287,8 +287,8 @@ struct SessionWriterState {
 }
 
 enum SessionWriterMessage {
-    /// Write an object over the wire
-    WriteObject(Frame),
+    /// Write a frame over the wire
+    WriteFrame(Frame),
 }
 
 #[cfg_attr(feature = "async-trait", ractor::async_trait)]
@@ -326,7 +326,7 @@ impl Actor for SessionWriter {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            SessionWriterMessage::WriteObject(msg) if state.writer.is_some() => {
+            SessionWriterMessage::WriteFrame(msg) if state.writer.is_some() => {
                 if let Some(stream) = &mut state.writer {
                     if let ActorWriteHalf::Regular(w) = stream {
                         w.writable().await?;
@@ -336,7 +336,7 @@ impl Actor for SessionWriter {
                         tracing::warn!("Error writing to the stream '{}'", write_err);
                     } else {
                         tracing::trace!("Wrote length, writing payload (len={})", msg.len());
-                        // now send the object
+                        // now send the frame
                         if let Err(write_err) = stream.write_all(&msg).await {
                             tracing::warn!("Error writing to the stream '{}'", write_err);
                             myself.stop(Some("channel_closed".to_string()));
@@ -355,18 +355,18 @@ impl Actor for SessionWriter {
     }
 }
 
-// ========================= Node Session reader ========================= //
+// =========================== Session reader =========================== //
 
 struct SessionReader {
     session: ActorRef<SessionMessage>,
 }
 
-/// The node connection messages
+/// The session connection messages
 pub enum SessionReaderMessage {
-    /// Wait for an object from the stream
+    /// Wait for a frame from the stream
     WaitForFrame,
 
-    /// Read next object off the stream
+    /// Read next frame off the stream
     ReadFrame(u64),
 }
 
@@ -385,7 +385,7 @@ impl Actor for SessionReader {
         myself: ActorRef<Self::Msg>,
         reader: ActorReadHalf,
     ) -> Result<Self::State, ActorProcessingErr> {
-        // start waiting for the first object on the network
+        // start waiting for the first frame on the network
         let _ = myself.cast(SessionReaderMessage::WaitForFrame);
         Ok(Self::State {
             reader: Some(reader),
@@ -455,7 +455,7 @@ impl Actor for SessionReader {
                     }
                 }
 
-                // we've read the object, now wait for next object
+                // we've read the frame, now wait for next object
                 let _ = myself.cast(SessionReaderMessage::WaitForFrame);
             }
             _ => {
