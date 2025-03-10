@@ -3,24 +3,14 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! This module provides two actors to manage TCP sessions with and without TLS encryption.
-//! We utilize [tokio_rustls] for managing encrypted sessions based on `rustls`. There basic primative
-//! actors supported here are
-//!
-//! 1. `TcpListener` - A server socket listener which accepts incoming requests and calls a callback on new received sessions
-//! 2. [TcpSession] - An actor which manages reading and writing frames to a given socket. Can read and write concurrently through
-//!    an interface actor
-//! 3. [NetworkStream] - Represents either encrypted server or client sockets or an unencrypted socket.
-//! 4. [FrameReceiver] - An implementation of this trait must be provided to the [TcpSession] in order to handle/decode incoming frames of
-//!    messages.
-
-pub mod listener;
-pub mod session;
+//! TCP server and session actors which [Frame] messages
 
 use std::net::SocketAddr;
 
-use ractor::ActorProcessingErr;
 use tokio::net::TcpStream;
+
+pub mod listener;
+pub mod session;
 
 /// A frame of data
 pub type Frame = Vec<u8>;
@@ -89,36 +79,6 @@ pub enum IncomingEncryptionMode {
     Raw,
     /// Accept sockets and establish a secure connection
     Tls(tokio_rustls::TlsAcceptor),
-}
-
-/// Represents a receiver of frames of data
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-pub trait FrameReceiver: ractor::State {
-    /// Called when a frame is received by the [TcpSession] actor
-    #[cfg(not(feature = "async-trait"))]
-    fn frame_ready(
-        &self,
-        f: Frame,
-    ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
-
-    /// Called when a frame is received by the [TcpSession] actor
-    #[cfg(feature = "async-trait")]
-    async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr>;
-}
-
-/// Represents
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-pub trait SessionAcceptor: ractor::State {
-    /// Called when a new incoming session is received by a `TcpListener` actor
-    #[cfg(not(feature = "async-trait"))]
-    fn new_session(
-        &self,
-        session: NetworkStream,
-    ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
-
-    /// Called when a new incoming session is received by a `TcpListener` actor
-    #[cfg(feature = "async-trait")]
-    async fn new_session(&self, session: NetworkStream) -> Result<(), ActorProcessingErr>;
 }
 
 pub use listener::*;

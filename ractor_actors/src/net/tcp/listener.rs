@@ -3,83 +3,73 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! Tcp listener actor
-
-use std::marker::PhantomData;
+//! TCP Server to accept incoming sessions
 
 use ractor::ActorProcessingErr;
 use ractor::{Actor, ActorRef};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use super::{IncomingEncryptionMode, SessionAcceptor};
+use super::{IncomingEncryptionMode, NetworkStream};
 
-/// A Tcp Socket [Listener] responsible for accepting new connections.
-pub struct Listener<R>
-where
-    R: SessionAcceptor,
-{
-    _r: PhantomData<fn() -> R>,
+/// A Tcp Socket [Listener] responsible for accepting new connections and spawning [super::session::Session]s
+/// which handle the message sending and receiving over the socket.
+///
+/// The [Listener] supervises all of the TCP [super::session::Session] actors and is responsible for logging
+/// connects and disconnects as well as tracking the current open [super::session::Session] actors.
+pub struct Listener {
+    port: super::NetworkPort,
+    on_connection: Arc<
+        dyn Fn(
+                NetworkStream,
+            ) -> Pin<Box<dyn Future<Output = Result<(), ActorProcessingErr>> + Send>>
+            + Send
+            + Sync,
+    >,
+
+    encryption: IncomingEncryptionMode,
 }
 
-impl<R> Default for Listener<R>
-where
-    R: SessionAcceptor,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<R> Listener<R>
-where
-    R: SessionAcceptor,
-{
-    /// Create a new TCP Listener actor
-    pub fn new() -> Self {
-        Self { _r: PhantomData }
+impl Listener {
+    /// Create a new `Listener`
+    pub fn new<F, Fut>(
+        port: super::NetworkPort,
+        on_connection: F,
+        encryption: IncomingEncryptionMode,
+    ) -> Self
+    where
+        F: Fn(NetworkStream) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<(), ActorProcessingErr>> + Send + 'static,
+    {
+        Self {
+            port,
+            on_connection: Arc::new(move |stream| Box::pin(on_connection(stream))),
+            encryption,
+        }
     }
 }
 
 /// The Node listener's state
-pub struct ListenerState<R>
-where
-    R: SessionAcceptor,
-{
+pub struct ListenerState {
     listener: Option<TcpListener>,
-    acceptor: R,
-    encryption: IncomingEncryptionMode,
-}
-
-/// Arguments to startup a TcpListener
-pub struct ListenerStartupArgs<R>
-where
-    R: SessionAcceptor,
-{
-    /// Port to listen on
-    pub port: super::NetworkPort,
-    /// Encryption settings for incoming sockets
-    pub encryption: IncomingEncryptionMode,
-    /// Callback module for accepted sockets
-    pub acceptor: R,
 }
 
 pub struct ListenerMessage;
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl<R> Actor for Listener<R>
-where
-    R: SessionAcceptor,
-{
+#[cfg_attr(feature = "async-trait", ractor::async_trait)]
+impl Actor for Listener {
     type Msg = ListenerMessage;
-    type Arguments = ListenerStartupArgs<R>;
-    type State = ListenerState<R>;
+    type Arguments = ();
+    type State = ListenerState;
 
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
+        _: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let addr = format!("0.0.0.0:{}", args.port);
+        let addr = format!("[::]:{}", self.port);
         let listener = match TcpListener::bind(&addr).await {
             Ok(l) => l,
             Err(err) => {
@@ -87,14 +77,14 @@ where
             }
         };
 
+        tracing::trace!("Listening on {}", addr);
+
         // startup the event processing loop by sending an initial msg
         let _ = myself.cast(ListenerMessage);
 
         // create the initial state
         Ok(Self::State {
             listener: Some(listener),
-            acceptor: args.acceptor,
-            encryption: args.encryption,
         })
     }
 
@@ -120,7 +110,7 @@ where
                 Ok((stream, addr)) => {
                     let local = stream.local_addr()?;
 
-                    let session = match &state.encryption {
+                    let session = match &self.encryption {
                         IncomingEncryptionMode::Raw => Some(super::NetworkStream::Raw {
                             peer_addr: addr,
                             local_addr: local,
@@ -134,10 +124,7 @@ where
                                     stream: enc_stream,
                                 }),
                                 Err(some_err) => {
-                                    tracing::warn!(
-                                        "Error establishing secure socket: {}",
-                                        some_err
-                                    );
+                                    tracing::warn!("Error establishing secure socket: {some_err}");
                                     None
                                 }
                             }
@@ -145,15 +132,12 @@ where
                     };
 
                     if let Some(stream) = session {
-                        state.acceptor.new_session(stream).await?;
-                        tracing::info!("TCP Session opened for {}", addr);
+                        let _ = (self.on_connection)(stream).await?;
+                        tracing::info!("TCP Session opened for {addr}");
                     }
                 }
                 Err(socket_accept_error) => {
-                    tracing::warn!(
-                        "Error accepting socket {} on Node server",
-                        socket_accept_error
-                    );
+                    tracing::warn!("Error accepting socket {socket_accept_error} on Node server");
                 }
             }
         }
