@@ -10,9 +10,15 @@ use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef};
 use ractor_actors::net::tcp::listener::*;
 use ractor_actors::net::tcp::session::*;
 use ractor_actors::net::tcp::*;
+use ractor_actors::watchdog;
+use ractor_actors::watchdog::TimeoutStrategy;
 use std::error::Error;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
+
+/// Controls if the watchdog is used
+static WATCHDOG: AtomicBool = AtomicBool::new(false);
 
 struct MyServer {}
 
@@ -35,7 +41,7 @@ impl Actor for MyServer {
                     move |stream| async move {
                         tracing::info!("New connection: {}", stream.peer_addr());
                         Actor::spawn(
-                            Some(format!("{}-session", stream.peer_addr())),
+                            Some(format!("MySession-{}", stream.peer_addr().port())),
                             MySession {
                                 info: stream.info(),
                             },
@@ -96,6 +102,15 @@ impl Actor for MySession {
             .await
             .map_err(ActorProcessingErr::from)?;
 
+        if WATCHDOG.load(Ordering::SeqCst) {
+            watchdog::register(
+                myself.get_cell(),
+                ractor::concurrency::Duration::from_secs(3),
+                TimeoutStrategy::Stop(),
+            )
+            .await?;
+        }
+
         Ok(Self::State {
             session: session.get_derived(),
         })
@@ -113,12 +128,16 @@ impl Actor for MySession {
 
     async fn handle(
         &self,
-        _: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Self::Msg::FrameAvailable(frame) => {
+                if WATCHDOG.load(Ordering::SeqCst) {
+                    watchdog::ping(myself.get_id()).await?;
+                }
+
                 let s: String = String::from_utf8(frame).unwrap();
                 tracing::info!("Got message: {:?}", s);
 
@@ -162,7 +181,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     init_logging();
 
     let s = std::env::var("PORT").unwrap_or("9999".to_string());
-    let port: NetworkPort = NetworkPort::from_str(&s)?;
+    let port = NetworkPort::from_str(&s)?;
+
+    let watchdog = std::env::var("WATCHDOG").unwrap_or("0".to_string()) == "1";
+
+    tracing::info!("Listening on port {}. Watchdog: {}", port, watchdog);
+
+    WATCHDOG.store(watchdog, Ordering::Relaxed);
+
+    tracing::info!("watchdog: {}", WATCHDOG.load(Ordering::Relaxed));
 
     let (system_ref, _) = Actor::spawn(None, MyServer {}, port).await?;
 

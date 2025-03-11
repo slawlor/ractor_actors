@@ -49,5 +49,8 @@ pub mod streams;
 #[cfg(feature = "sync")]
 pub mod sync;
 
+#[cfg(feature = "watchdog")]
+pub mod watchdog;
+
 #[cfg(test)]
 pub(crate) mod common_test;
