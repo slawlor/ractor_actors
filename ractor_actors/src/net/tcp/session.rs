@@ -7,13 +7,9 @@
 
 // TODO: RUSTLS + Tokio : https://github.com/tokio-rs/tls/blob/master/tokio-rustls/examples/server/src/main.rs
 
-use crate::net::tcp::{Frame, NetworkStreamInfo};
-use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef};
+use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef, SpawnErr};
 use ractor::{ActorCell, SupervisionEvent};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
-use std::sync::Arc;
 use tokio::io::ErrorKind;
 use tokio::io::{AsyncReadExt, ReadHalf, WriteHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -53,22 +49,13 @@ async fn read_n_bytes(stream: &mut ActorReadHalf, len: usize) -> Result<Vec<u8>,
 /// The [Session] actor supervises two child actors, [SessionReader] and [SessionWriter]. Should
 /// either the reader or writer exit, they will terminate the entire session.
 pub struct Session {
-    pub spawn_handler: Arc<
-        dyn Fn(
-                ActorCell,
-                DerivedActorRef<SendFrame>,
-                NetworkStreamInfo,
-            ) -> Pin<
-                Box<
-                    dyn Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
-                        + Send,
-                >,
-            > + Send
-            + Sync,
-    >,
+    handler: DerivedActorRef<FrameAvailable>,
     pub peer_addr: SocketAddr,
     pub local_addr: SocketAddr,
 }
+
+/// A frame of data
+pub type Frame = Vec<u8>;
 
 pub struct FrameAvailable(pub Frame);
 pub struct SendFrame(pub Frame);
@@ -90,6 +77,36 @@ impl TryFrom<SessionMessage> for SendFrame {
     }
 }
 
+impl Session {
+    pub async fn spawn_linked(
+        handler: DerivedActorRef<FrameAvailable>,
+        stream: super::NetworkStream,
+        supervisor: ActorCell,
+    ) -> Result<ActorRef<SessionMessage>, SpawnErr> {
+        match Actor::spawn_linked(
+            Some(stream.peer_addr().to_string()),
+            Session {
+                handler,
+                peer_addr: stream.peer_addr(),
+                local_addr: stream.local_addr(),
+            },
+            stream,
+            supervisor,
+        )
+            .await
+        {
+            Err(err) => {
+                tracing::error!("Failed to spawn session writer actor: {err}");
+                Err(err)
+            }
+            Ok((a, _)) => {
+                // return the actor handle
+                Ok(a)
+            }
+        }
+    }
+}
+
 /// The connection messages
 pub enum SessionMessage {
     /// Send a message over the channel
@@ -101,7 +118,6 @@ pub enum SessionMessage {
 
 /// The session's state
 pub struct SessionState {
-    handler: DerivedActorRef<FrameAvailable>,
     writer: ActorRef<SessionWriterMessage>,
     reader: ActorRef<SessionReaderMessage>,
 }
@@ -117,8 +133,6 @@ impl Actor for Session {
         myself: ActorRef<Self::Msg>,
         stream: super::NetworkStream,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let info = stream.info();
-
         let (read, write) = match stream {
             super::NetworkStream::Raw { stream, .. } => {
                 let (read, write) = stream.into_split();
@@ -159,12 +173,7 @@ impl Actor for Session {
         )
         .await?;
 
-        let spawn_handler = &self.spawn_handler.clone();
-        let handler =
-            spawn_handler(myself.get_cell(), myself.get_derived::<SendFrame>(), info).await?;
-
         Ok(Self::State {
-            handler,
             writer,
             reader,
         })
@@ -200,7 +209,7 @@ impl Actor for Session {
                 //     self.local_addr,
                 //     self.peer_addr,
                 // );
-                let _ = state.handler.cast(FrameAvailable(msg));
+                let _ = self.handler.cast(FrameAvailable(msg));
             }
         }
         Ok(())

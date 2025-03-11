@@ -12,9 +12,6 @@ use tokio::net::TcpStream;
 pub mod listener;
 pub mod session;
 
-/// A frame of data
-pub type Frame = Vec<u8>;
-
 /// A network port
 pub type NetworkPort = u16;
 
@@ -58,7 +55,7 @@ pub struct NetworkStreamInfo {
 }
 
 impl NetworkStream {
-    fn info(&self) -> NetworkStreamInfo {
+    pub fn info(&self) -> NetworkStreamInfo {
         NetworkStreamInfo{
             peer_addr: self.peer_addr(),
             local_addr: self.local_addr(),
@@ -66,7 +63,7 @@ impl NetworkStream {
     }
 
     /// Retrieve the peer (other) socket address
-    fn peer_addr(&self) -> SocketAddr {
+    pub fn peer_addr(&self) -> SocketAddr {
         match self {
             Self::Raw { peer_addr, .. } => *peer_addr,
             Self::TlsServer { peer_addr, .. } => *peer_addr,
@@ -75,7 +72,7 @@ impl NetworkStream {
     }
 
     /// Retrieve the local socket address
-    fn local_addr(&self) -> SocketAddr {
+    pub fn local_addr(&self) -> SocketAddr {
         match self {
             Self::Raw { local_addr, .. } => *local_addr,
             Self::TlsServer { local_addr, .. } => *local_addr,
@@ -92,6 +89,3 @@ pub enum IncomingEncryptionMode {
     /// Accept sockets and establish a secure connection
     Tls(tokio_rustls::TlsAcceptor),
 }
-
-pub use listener::*;
-pub use session::*;

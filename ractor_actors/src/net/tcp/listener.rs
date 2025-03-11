@@ -5,14 +5,13 @@
 
 //! TCP Server to accept incoming sessions
 
-use ractor::{Actor, ActorRef, DerivedActorRef, SupervisionEvent};
-use ractor::{ActorCell, ActorProcessingErr};
+use ractor::{Actor, ActorProcessingErr, ActorRef};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use super::{FrameAvailable, IncomingEncryptionMode, NetworkStreamInfo, SendFrame, Session};
+use super::{IncomingEncryptionMode, NetworkStream};
 
 /// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
 /// a client connects, the `on_connection` will be called. The callback should create a new
@@ -24,17 +23,11 @@ pub struct Listener {
     port: super::NetworkPort,
     encryption: IncomingEncryptionMode,
 
-    spawn_handler: Arc<
+    connection_handler: Arc<
         dyn Fn(
-                ActorCell,
-                DerivedActorRef<SendFrame>,
-                NetworkStreamInfo,
-            ) -> Pin<
-                Box<
-                    dyn Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
-                        + Send,
-                >,
-            > + Send
+                NetworkStream,
+            ) -> Pin<Box<dyn Future<Output = Result<(), ActorProcessingErr>> + Send>>
+            + Send
             + Sync,
     >,
 }
@@ -44,23 +37,16 @@ impl Listener {
     pub fn new<F, Fut>(
         port: super::NetworkPort,
         encryption: IncomingEncryptionMode,
-        spawn_handler: F,
+        connection_handler: F,
     ) -> Self
     where
-        F: Fn(ActorCell, DerivedActorRef<SendFrame>, NetworkStreamInfo) -> Fut
-            + Send
-            + Sync
-            + 'static,
-        Fut: Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
-            + Send
-            + 'static,
+        F: Fn(NetworkStream) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<(), ActorProcessingErr>> + Send + 'static,
     {
         Self {
             port,
             encryption,
-            spawn_handler: Arc::new(move |cell, session, info| {
-                Box::pin(spawn_handler(cell, session, info))
-            }),
+            connection_handler: Arc::new(move |stream| Box::pin(connection_handler(stream))),
         }
     }
 }
@@ -124,7 +110,7 @@ impl Actor for Listener {
                 Ok((stream, addr)) => {
                     let local = stream.local_addr()?;
 
-                    let session = match &self.encryption {
+                    let network_stream = match &self.encryption {
                         IncomingEncryptionMode::Raw => Some(super::NetworkStream::Raw {
                             peer_addr: addr,
                             local_addr: local,
@@ -145,19 +131,15 @@ impl Actor for Listener {
                         }
                     };
 
-                    if let Some(stream) = session {
-                        let _ = Actor::spawn_linked(
-                            Some(addr.to_string()),
-                            Session {
-                                spawn_handler: self.spawn_handler.clone(),
-                                peer_addr: stream.peer_addr(),
-                                local_addr: stream.local_addr(),
-                            },
-                            stream,
-                            myself.get_cell(),
-                        )
-                        .await?;
+                    if let Some(network_stream) = network_stream {
                         tracing::info!("TCP Session opened for {addr}");
+
+                        match (self.connection_handler)(network_stream).await {
+                            Ok(_) => (),
+                            Err(err) => {
+                                tracing::warn!("Connection handler failed session: {err}");
+                            }
+                        }
                     }
                 }
                 Err(socket_accept_error) => {
@@ -169,17 +151,5 @@ impl Actor for Listener {
         // continue accepting new sockets
         let _ = myself.cast(ListenerMessage);
         Ok(())
-    }
-
-    async fn handle_supervisor_evt(
-        &self,
-        _: ActorRef<Self::Msg>,
-        message: SupervisionEvent,
-        _: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        // Ignore any supervisor messages to the listener
-        match message {
-            _ => Ok(())
-        }
     }
 }

@@ -6,7 +6,9 @@
 extern crate ractor_actors;
 
 use chrono::{DateTime, Utc};
-use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef, SupervisionEvent};
+use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef};
+use ractor_actors::net::tcp::listener::*;
+use ractor_actors::net::tcp::session::*;
 use ractor_actors::net::tcp::*;
 use std::error::Error;
 use std::str::FromStr;
@@ -26,19 +28,22 @@ impl Actor for MyServer {
     ) -> Result<Self::State, ActorProcessingErr> {
         let _ = myself
             .spawn_linked(
-                Some("listener".into()),
+                Some(format!("listener-{}", port)),
                 Listener::new(
                     port,
                     IncomingEncryptionMode::Raw,
-                    move |supervisor, session, info: NetworkStreamInfo| async move {
-                        tracing::info!("New connection: {}", info.peer_addr);
-                        tracing::info!("supervised by: {:?}", supervisor);
-                        let (session, _) =
-                            Actor::spawn_linked(Some(format!("{}-session", info.peer_addr)), MySession { session, info }, (), supervisor)
-                                .await
-                                .map_err(|e| ActorProcessingErr::from(e))?;
-                        let s: DerivedActorRef<FrameAvailable> = session.get_derived();
-                        Ok(s)
+                    move |stream| async move {
+                        tracing::info!("New connection: {}", stream.peer_addr());
+                        Actor::spawn(
+                            Some(format!("{}-session", stream.peer_addr())),
+                            MySession {
+                                info: stream.info(),
+                            },
+                            stream,
+                        )
+                        .await
+                        .map_err(|e| ActorProcessingErr::from(e))?;
+                        Ok(())
                     },
                 ),
                 (),
@@ -50,7 +55,6 @@ impl Actor for MyServer {
 }
 
 struct MySession {
-    session: DerivedActorRef<SendFrame>,
     info: NetworkStreamInfo,
 }
 
@@ -68,22 +72,42 @@ impl TryFrom<MySessionMsg> for FrameAvailable {
     type Error = ();
 
     fn try_from(_: MySessionMsg) -> Result<Self, Self::Error> {
-        tracing::info!("woot");
         Err(())
     }
 }
 
+struct MySessionState {
+    session: DerivedActorRef<SendFrame>,
+}
+
 impl Actor for MySession {
     type Msg = MySessionMsg;
-    type State = ();
-    type Arguments = ();
+    type State = MySessionState;
+    type Arguments = NetworkStream;
 
     async fn pre_start(
         &self,
-        _: ActorRef<Self::Msg>,
-        _: Self::Arguments,
+        myself: ActorRef<Self::Msg>,
+        stream: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        tracing::info!("New session: {}", self.info.peer_addr);
+        tracing::info!("New session: {}", stream.peer_addr());
+
+        let session = Session::spawn_linked(myself.get_derived(), stream, myself.get_cell())
+            .await
+            .map_err(ActorProcessingErr::from)?;
+
+        Ok(Self::State {
+            session: session.get_derived(),
+        })
+    }
+
+    async fn post_stop(
+        &self,
+        _: ActorRef<Self::Msg>,
+        _: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        tracing::info!("Stopping connection for {}", self.info.peer_addr);
+
         Ok(())
     }
 
@@ -91,7 +115,7 @@ impl Actor for MySession {
         &self,
         _: ActorRef<Self::Msg>,
         message: Self::Msg,
-        _: &mut Self::State,
+        state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Self::Msg::FrameAvailable(frame) => {
@@ -101,22 +125,11 @@ impl Actor for MySession {
                 let ts: DateTime<Utc> = SystemTime::now().into();
                 let reply = format!("{}: {}", ts.to_rfc3339(), s);
 
-                let _ = self.session.cast(SendFrame(reply.into_bytes()))?;
+                let _ = state.session.cast(SendFrame(reply.into_bytes()))?;
 
                 Ok(())
             }
         }
-    }
-
-    async fn handle_supervisor_evt(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        message: SupervisionEvent,
-        _state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        tracing::info!("handle_supervisor_evt: {:?}", message);
-
-        Ok(())
     }
 }
 
