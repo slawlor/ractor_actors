@@ -6,12 +6,10 @@
 extern crate ractor_actors;
 
 use chrono::{DateTime, Utc};
-use ractor::{Actor, ActorProcessingErr, ActorRef};
+use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef, SupervisionEvent};
 use ractor_actors::net::tcp::*;
 use std::error::Error;
-use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::SystemTime;
 
 struct MyServer {}
@@ -26,29 +24,22 @@ impl Actor for MyServer {
         myself: ActorRef<Self::Msg>,
         port: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let cell = Arc::new(myself.get_cell());
-
         let _ = myself
             .spawn_linked(
                 Some("listener".into()),
                 Listener::new(
                     port,
-                    move |stream: NetworkStream| {
-                        let cell = cell.clone();
-                        async move {
-                            tracing::info!("New connection: {}", stream.peer_addr());
-                            let _ = Actor::spawn_linked(
-                                None,
-                                MySession {},
-                                stream,
-                                cell.deref().clone(),
-                            )
-                            .await
-                            .map_err(|e| ActorProcessingErr::from(e))?;
-                            Ok(())
-                        }
-                    },
                     IncomingEncryptionMode::Raw,
+                    move |supervisor, session, info: NetworkStreamInfo| async move {
+                        tracing::info!("New connection: {}", info.peer_addr);
+                        tracing::info!("supervised by: {:?}", supervisor);
+                        let (session, _) =
+                            Actor::spawn_linked(Some(format!("{}-session", info.peer_addr)), MySession { session, info }, (), supervisor)
+                                .await
+                                .map_err(|e| ActorProcessingErr::from(e))?;
+                        let s: DerivedActorRef<FrameAvailable> = session.get_derived();
+                        Ok(s)
+                    },
                 ),
                 (),
             )
@@ -58,56 +49,74 @@ impl Actor for MyServer {
     }
 }
 
-struct MySession {}
+struct MySession {
+    session: DerivedActorRef<SendFrame>,
+    info: NetworkStreamInfo,
+}
+
+enum MySessionMsg {
+    FrameAvailable(Frame),
+}
+
+impl From<FrameAvailable> for MySessionMsg {
+    fn from(FrameAvailable(frame): FrameAvailable) -> Self {
+        Self::FrameAvailable(frame)
+    }
+}
+
+impl TryFrom<MySessionMsg> for FrameAvailable {
+    type Error = ();
+
+    fn try_from(_: MySessionMsg) -> Result<Self, Self::Error> {
+        tracing::info!("woot");
+        Err(())
+    }
+}
 
 impl Actor for MySession {
-    type Msg = SessionMessage;
-    type State = ActorRef<SessionMessage>;
-    type Arguments = NetworkStream;
+    type Msg = MySessionMsg;
+    type State = ();
+    type Arguments = ();
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self::Msg>,
-        stream: Self::Arguments,
+        _: ActorRef<Self::Msg>,
+        _: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let peer_addr = stream.peer_addr();
-        let local_addr = stream.local_addr();
-        let session = Session::spawn_linked(
-            myself.clone(),
-            stream,
-            peer_addr,
-            local_addr,
-            myself.get_cell(),
-        )
-        .await
-        .map_err(|e| ActorProcessingErr::from(e))?;
-
-        Ok(session)
+        tracing::info!("New session: {}", self.info.peer_addr);
+        Ok(())
     }
 
     async fn handle(
         &self,
         _: ActorRef<Self::Msg>,
         message: Self::Msg,
-        state: &mut Self::State,
+        _: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            SessionMessage::Send(frame) => {
-                tracing::info!("Sending frame {:?}??", frame);
-                Ok(())
-            }
-            SessionMessage::FrameAvailable(frame) => {
+            Self::Msg::FrameAvailable(frame) => {
                 let s: String = String::from_utf8(frame).unwrap();
                 tracing::info!("Got message: {:?}", s);
 
                 let ts: DateTime<Utc> = SystemTime::now().into();
                 let reply = format!("{}: {}", ts.to_rfc3339(), s);
 
-                let _ = state.cast(SessionMessage::Send(reply.into_bytes()))?;
+                let _ = self.session.cast(SendFrame(reply.into_bytes()))?;
 
                 Ok(())
             }
         }
+    }
+
+    async fn handle_supervisor_evt(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        message: SupervisionEvent,
+        _state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        tracing::info!("handle_supervisor_evt: {:?}", message);
+
+        Ok(())
     }
 }
 
@@ -115,8 +124,6 @@ fn init_logging() {
     use std::io::stderr;
     use std::io::IsTerminal;
     use tracing::level_filters::LevelFilter;
-    use tracing_glog::Glog;
-    use tracing_glog::GlogFields;
     use tracing_subscriber::filter::EnvFilter;
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::Registry;
@@ -127,9 +134,11 @@ fn init_logging() {
 
     let fmt = tracing_subscriber::fmt::Layer::default()
         .with_ansi(stderr().is_terminal())
-        .with_writer(std::io::stderr)
-        .event_format(Glog::default().with_timer(tracing_glog::LocalTime::default()))
-        .fmt_fields(GlogFields::default().compact());
+        .with_writer(stderr)
+        .event_format(tracing_subscriber::fmt::format().compact())
+        // .event_format(Glog::default().with_timer(tracing_glog::LocalTime::default()))
+        // .fmt_fields(GlogFields::default().compact())
+        ;
 
     let subscriber = Registry::default().with(filter).with(fmt);
     tracing::subscriber::set_global_default(subscriber).expect("to set global subscriber");

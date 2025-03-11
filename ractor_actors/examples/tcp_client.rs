@@ -8,6 +8,9 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let stream = TcpStream::connect("127.0.0.1:9999").await?;
+
+    tracing::info!("Connected peer={}, local={}", stream.peer_addr()?, stream.local_addr()?);
+
     let (reader, mut writer) = stream.into_split();
 
     let mut reader = BufReader::new(reader);

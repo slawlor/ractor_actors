@@ -5,14 +5,14 @@
 
 //! TCP Server to accept incoming sessions
 
-use ractor::{Actor, ActorRef};
+use ractor::{Actor, ActorRef, DerivedActorRef, SupervisionEvent};
 use ractor::{ActorCell, ActorProcessingErr};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use super::{IncomingEncryptionMode, NetworkStreamInfo, Session, SessionMessage};
+use super::{FrameAvailable, IncomingEncryptionMode, NetworkStreamInfo, SendFrame, Session};
 
 /// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
 /// a client connects, the `on_connection` will be called. The callback should create a new
@@ -27,10 +27,11 @@ pub struct Listener {
     spawn_handler: Arc<
         dyn Fn(
                 ActorCell,
+                DerivedActorRef<SendFrame>,
                 NetworkStreamInfo,
             ) -> Pin<
                 Box<
-                    dyn Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>>
+                    dyn Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
                         + Send,
                 >,
             > + Send
@@ -46,14 +47,19 @@ impl Listener {
         spawn_handler: F,
     ) -> Self
     where
-        F: Fn(ActorCell, NetworkStreamInfo) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>> + Send + 'static,
+        F: Fn(ActorCell, DerivedActorRef<SendFrame>, NetworkStreamInfo) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
+            + Send
+            + 'static,
     {
         Self {
             port,
             encryption,
-            spawn_handler: Arc::new(move |cell: ActorCell, info: NetworkStreamInfo| {
-                Box::pin(spawn_handler(cell, info))
+            spawn_handler: Arc::new(move |cell, session, info| {
+                Box::pin(spawn_handler(cell, session, info))
             }),
         }
     }
@@ -163,5 +169,17 @@ impl Actor for Listener {
         // continue accepting new sockets
         let _ = myself.cast(ListenerMessage);
         Ok(())
+    }
+
+    async fn handle_supervisor_evt(
+        &self,
+        _: ActorRef<Self::Msg>,
+        message: SupervisionEvent,
+        _: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        // Ignore any supervisor messages to the listener
+        match message {
+            _ => Ok(())
+        }
     }
 }

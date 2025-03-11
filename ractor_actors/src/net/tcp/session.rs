@@ -8,7 +8,7 @@
 // TODO: RUSTLS + Tokio : https://github.com/tokio-rs/tls/blob/master/tokio-rustls/examples/server/src/main.rs
 
 use crate::net::tcp::{Frame, NetworkStreamInfo};
-use ractor::{Actor, ActorProcessingErr, ActorRef};
+use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef};
 use ractor::{ActorCell, SupervisionEvent};
 use std::future::Future;
 use std::net::SocketAddr;
@@ -56,10 +56,11 @@ pub struct Session {
     pub spawn_handler: Arc<
         dyn Fn(
                 ActorCell,
+                DerivedActorRef<SendFrame>,
                 NetworkStreamInfo,
             ) -> Pin<
                 Box<
-                    dyn Future<Output = Result<ActorRef<SessionMessage>, ActorProcessingErr>>
+                    dyn Future<Output = Result<DerivedActorRef<FrameAvailable>, ActorProcessingErr>>
                         + Send,
                 >,
             > + Send
@@ -67,6 +68,26 @@ pub struct Session {
     >,
     pub peer_addr: SocketAddr,
     pub local_addr: SocketAddr,
+}
+
+pub struct FrameAvailable(pub Frame);
+pub struct SendFrame(pub Frame);
+
+impl From<SendFrame> for SessionMessage {
+    fn from(SendFrame(frame): SendFrame) -> Self {
+        SessionMessage::Send(frame)
+    }
+}
+
+impl TryFrom<SessionMessage> for SendFrame {
+    type Error = ();
+
+    fn try_from(value: SessionMessage) -> Result<Self, Self::Error> {
+        match value {
+            SessionMessage::Send(frame) => Ok(SendFrame(frame)),
+            _ => Err(()),
+        }
+    }
 }
 
 /// The connection messages
@@ -80,7 +101,7 @@ pub enum SessionMessage {
 
 /// The session's state
 pub struct SessionState {
-    handler: ActorRef<SessionMessage>,
+    handler: DerivedActorRef<FrameAvailable>,
     writer: ActorRef<SessionWriterMessage>,
     reader: ActorRef<SessionReaderMessage>,
 }
@@ -121,10 +142,15 @@ impl Actor for Session {
 
         // let (read, write) = stream.into_split();
         // spawn writer + reader child actors
-        let (writer, _) =
-            Actor::spawn_linked(None, SessionWriter, write, myself.get_cell()).await?;
+        let (writer, _) = Actor::spawn_linked(
+            Some(format!("{}-rw", myself.get_name().unwrap_or_default())),
+            SessionWriter,
+            write,
+            myself.get_cell(),
+        )
+        .await?;
         let (reader, _) = Actor::spawn_linked(
-            None,
+            Some(format!("{}-rd", myself.get_name().unwrap_or_default())),
             SessionReader {
                 session: myself.clone(),
             },
@@ -134,7 +160,8 @@ impl Actor for Session {
         .await?;
 
         let spawn_handler = &self.spawn_handler.clone();
-        let handler = spawn_handler(myself.get_cell(), info).await?;
+        let handler =
+            spawn_handler(myself.get_cell(), myself.get_derived::<SendFrame>(), info).await?;
 
         Ok(Self::State {
             handler,
@@ -160,20 +187,20 @@ impl Actor for Session {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Self::Msg::Send(msg) => {
-                tracing::debug!(
-                    "SEND: {} -> {} - '{msg:?}'",
-                    self.local_addr,
-                    self.peer_addr
-                );
+                // tracing::debug!(
+                //     "SEND: {} -> {} - '{msg:?}'",
+                //     self.local_addr,
+                //     self.peer_addr
+                // );
                 let _ = state.writer.cast(SessionWriterMessage::WriteFrame(msg));
             }
             Self::Msg::FrameAvailable(msg) => {
-                tracing::debug!(
-                    "RECEIVE {} <- {} - '{msg:?}'",
-                    self.local_addr,
-                    self.peer_addr,
-                );
-                let _ = state.handler.cast(SessionMessage::FrameAvailable(msg));
+                // tracing::debug!(
+                //     "RECEIVE {} <- {} - '{msg:?}'",
+                //     self.local_addr,
+                //     self.peer_addr,
+                // );
+                let _ = state.handler.cast(FrameAvailable(msg));
             }
         }
         Ok(())
@@ -196,6 +223,7 @@ impl Actor for Session {
                 } else {
                     tracing::error!("TCP Session received a child panic from an unknown child actor ({}) - '{panic_msg}'", actor.get_id());
                 }
+                myself.stop_children(Some("session_stop_panic".to_string()));
                 myself.stop(Some("child_panic".to_string()));
             }
             SupervisionEvent::ActorTerminated(actor, _, exit_reason) => {
@@ -206,6 +234,7 @@ impl Actor for Session {
                 } else {
                     tracing::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{exit_reason:?}'", actor.get_id());
                 }
+                myself.stop_children(Some("session_stop_terminated".to_string()));
                 myself.stop(Some("child_terminate".to_string()));
             }
             _ => {
