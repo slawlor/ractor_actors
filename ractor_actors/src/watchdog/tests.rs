@@ -1,8 +1,9 @@
 use super::WatchdogMsg::{Register, Stats};
-use super::{Watchdog, WatchdogMsg};
+use super::{TimeoutStrategy, WatchdogMsg};
+use crate::watchdog::watchdog::Watchdog;
 use ractor::*;
-use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
 use std::time::Duration;
 use tracing::info;
 
@@ -27,7 +28,11 @@ async fn test_foo() {
         ) -> Result<Self::State, ActorProcessingErr> {
             cast!(
                 watchdog.clone(),
-                Register(myself.get_cell(), Duration::from_millis(500))
+                Register(
+                    myself.get_cell(),
+                    Duration::from_millis(500),
+                    TimeoutStrategy::Kill
+                )
             )?;
 
             myself.send_after(Duration::from_millis(400), || "hello".to_string());
@@ -54,7 +59,11 @@ async fn test_foo() {
             HANDLE.store(true, SeqCst);
             cast!(
                 state,
-                Register(myself.get_cell(), Duration::from_millis(500))
+                Register(
+                    myself.get_cell(),
+                    Duration::from_millis(500),
+                    TimeoutStrategy::Kill
+                )
             )
             .map_err(|e| ActorProcessingErr::from(e))
         }

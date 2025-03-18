@@ -1,13 +1,13 @@
-use crate::watchdog::watchdog::WatchdogMsg;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{Actor, ActorId, ActorRef, MessagingErr, RpcReplyPort};
 use ractor::{ActorCell, ActorProcessingErr};
 use tokio::sync::OnceCell;
+use watchdog::WatchdogMsg;
 
 pub enum TimeoutStrategy {
-    Kill(),
-    Stop(),
+    Kill,
+    Stop,
 }
 
 pub const WATCHDOG_TIMEOUT: &'static str = "watchdog_timeout";

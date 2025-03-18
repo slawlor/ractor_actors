@@ -94,7 +94,7 @@ impl Actor for Watchdog {
                         timeout_strategy,
                         ..
                     }) => match timeout_strategy {
-                        TimeoutStrategy::Kill() => {
+                        TimeoutStrategy::Kill => {
                             info!(
                                 actor_id = actor.get_id().to_string(),
                                 actor_name = actor.get_name(),
@@ -103,7 +103,7 @@ impl Actor for Watchdog {
                             actor.kill();
                             state.kills += 1;
                         }
-                        TimeoutStrategy::Stop() => {
+                        TimeoutStrategy::Stop => {
                             info!(
                                 actor_id = actor.get_id().to_string(),
                                 actor_name = actor.get_name(),

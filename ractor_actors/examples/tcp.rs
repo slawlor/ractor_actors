@@ -106,7 +106,7 @@ impl Actor for MySession {
             watchdog::register(
                 myself.get_cell(),
                 ractor::concurrency::Duration::from_secs(3),
-                TimeoutStrategy::Stop(),
+                TimeoutStrategy::Stop,
             )
             .await?;
         }
