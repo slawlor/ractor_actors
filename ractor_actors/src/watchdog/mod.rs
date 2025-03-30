@@ -1,3 +1,85 @@
+// Copyright (c) Sean Lawlor
+//
+// This source code is licensed under both the MIT license found in the
+// LICENSE-MIT file in the root directory of this source tree.
+
+//! Actor watchdogs
+//!
+//! An actor can use a watchdog to terminate itself if it's not feeding the watchdog. After an actor
+//! is registered with the watchdog, it has to ping the watchdog within the set timeout.
+//!
+//! This can be used by actors that has certain deadlines, for example user interactivity.
+//!
+//! If an application has a per-user actor and is waiting for a user response within a certain time,
+//! it can use this module to do so. The actor can either be stopped or killed.
+//!
+//! To use the watchdog, the application has to first call [register] and then call [ping] on a
+//! regular interval. The watchdog can be disabled by calling [unregister], but its usage is
+//! optional. If an actor terminates for any reason before the watchdog fires, it is simply cleaned
+//! up.
+//!
+//! ```rust
+//! use ractor::*;
+//! use ractor::concurrency::Duration;
+//! use ractor_actors::watchdog;
+//! use ractor_actors::watchdog::TimeoutStrategy;
+//! struct MyActor;
+//!
+//! enum MyActorMsg {
+//!     UserInput(String),
+//! }
+//!
+//! impl Actor for MyActor {
+//!     type Msg = MyActorMsg;
+//!     type State = ();
+//!     type Arguments = ();
+//!
+//!     async fn pre_start(
+//!         &self,
+//!         myself: ActorRef<Self::Msg>,
+//!         args: Self::Arguments,
+//!     ) -> Result<Self::State, ActorProcessingErr> {
+//!         // Register with the watchdog. If this actor don't ping it once every second, it will
+//!         // be stopped.
+//!         watchdog::register(
+//!             myself.get_cell(),
+//!             Duration::from_secs(1),
+//!             TimeoutStrategy::Stop,
+//!         )
+//!         .await?;
+//!
+//!         Ok(())
+//!     }
+//!
+//!     async fn post_stop(
+//!         &self,
+//!         _: ActorRef<Self::Msg>,
+//!         _: &mut Self::State,
+//!     ) -> Result<(), ActorProcessingErr> {
+//!         println!("Input timeout!");
+//!
+//!         Ok(())
+//!     }
+//!     async fn handle(
+//!         &self,
+//!         myself: ActorRef<Self::Msg>,
+//!         message: Self::Msg,
+//!         state: &mut Self::State,
+//!     ) -> Result<(), ActorProcessingErr> {
+//!         match message {
+//!             Self::Msg::UserInput(msg) => {
+//!                 // When we get a message from the user, ping the watchdog
+//!                 watchdog::ping(myself.get_id()).await?;
+//!                 println!("User input: {}", msg);
+//!             }
+//!             // ... handle other messages
+//!         }
+//!
+//!         Ok(())
+//!     }
+//! }
+//! ```
+
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{Actor, ActorId, ActorRef, MessagingErr, RpcReplyPort};
@@ -5,13 +87,25 @@ use ractor::{ActorCell, ActorProcessingErr};
 use tokio::sync::OnceCell;
 use watchdog::WatchdogMsg;
 
+/// See [register]. Controls what the watchdog will do on timeout.
 pub enum TimeoutStrategy {
+    /// This will call [ActorCell::kill].
     Kill,
+    /// This will call [ActorCell::stop] with [WATCHDOG_TIMEOUT] as stop reason.
     Stop,
 }
 
+/// The stop reason that will be used when an actor is stopped by a watchdog timeout.
 pub const WATCHDOG_TIMEOUT: &'static str = "watchdog_timeout";
 
+/// Register an actor with the watchdog.
+///
+/// # Arguments
+///
+/// * `actor` - the actor that is to be watched.
+/// * `duration` - the max duration between each ping.
+/// * `timeout_strategy` - What the actor should do on a timeout. See [TimeoutStrategy].
+///
 pub async fn register(
     actor: ActorCell,
     duration: Duration,
@@ -20,14 +114,26 @@ pub async fn register(
     cast(WatchdogMsg::Register(actor, duration, timeout_strategy)).await
 }
 
+/// Unregister an actor from the watchdog.
+///
+/// # Arguments
+///
+/// * `actor` - the actor to unregister.
 pub async fn unregister(actor: ActorCell) -> Result<(), MessagingErr<()>> {
     cast(WatchdogMsg::Unregister(actor)).await
 }
 
+/// Send a ping to the watchdog. Doing this within the timeout prevents the watchdog from
+/// terminating the actor.
+///
+/// # Arguments
+///
+/// * `actor` - the actor that is sending the ping.
 pub async fn ping(actor: ActorId) -> Result<(), MessagingErr<()>> {
     cast(WatchdogMsg::Ping(actor)).await
 }
 
+/// The return value from [stats] that describes
 pub struct WatchdogStats {
     pub kills: usize,
 }
