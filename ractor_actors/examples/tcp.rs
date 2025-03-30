@@ -20,11 +20,13 @@ use std::time::SystemTime;
 /// Controls if the watchdog is used
 static WATCHDOG: AtomicBool = AtomicBool::new(false);
 
-struct MyServer {}
+struct MyServer;
+
+struct MyServerState {}
 
 impl Actor for MyServer {
     type Msg = ();
-    type State = ();
+    type State = MyServerState;
     type Arguments = NetworkPort;
 
     async fn pre_start(
@@ -32,29 +34,38 @@ impl Actor for MyServer {
         myself: ActorRef<Self::Msg>,
         port: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
+        let acceptor = MyServerSocketAcceptor {};
+
         let _ = myself
             .spawn_linked(
                 Some(format!("listener-{}", port)),
-                Listener::new(
+                Listener::new(),
+                ListenerStartupArgs {
                     port,
-                    IncomingEncryptionMode::Raw,
-                    move |stream| async move {
-                        tracing::info!("New connection: {}", stream.peer_addr());
-                        Actor::spawn(
-                            Some(format!("MySession-{}", stream.peer_addr().port())),
-                            MySession {
-                                info: stream.info(),
-                            },
-                            stream,
-                        )
-                        .await
-                        .map_err(|e| ActorProcessingErr::from(e))?;
-                        Ok(())
-                    },
-                ),
-                (),
+                    encryption: IncomingEncryptionMode::Raw,
+                    acceptor,
+                },
             )
             .await?;
+
+        Ok(Self::State {})
+    }
+}
+
+struct MyServerSocketAcceptor;
+
+impl SessionAcceptor for MyServerSocketAcceptor {
+    async fn new_session(&self, stream: NetworkStream) -> Result<(), ActorProcessingErr> {
+        tracing::info!("New connection: {}", stream.peer_addr());
+        Actor::spawn(
+            Some(format!("MySession-{}", stream.peer_addr().port())),
+            MySession {
+                info: stream.info(),
+            },
+            stream,
+        )
+        .await
+        .map_err(|e| ActorProcessingErr::from(e))?;
 
         Ok(())
     }
