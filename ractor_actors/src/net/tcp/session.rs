@@ -93,7 +93,7 @@ impl Session {
             stream,
             supervisor,
         )
-            .await
+        .await
         {
             Err(err) => {
                 tracing::error!("Failed to spawn session writer actor: {err}");
@@ -173,10 +173,7 @@ impl Actor for Session {
         )
         .await?;
 
-        Ok(Self::State {
-            writer,
-            reader,
-        })
+        Ok(Self::State { writer, reader })
     }
 
     async fn post_stop(
@@ -226,11 +223,11 @@ impl Actor for Session {
         match message {
             SupervisionEvent::ActorFailed(actor, panic_msg) => {
                 if actor.get_id() == state.reader.get_id() {
-                    tracing::error!("TCP Session's reader panicked with '{panic_msg}'");
+                    tracing::error!("TCP Session's reader panicked with '{}'", panic_msg);
                 } else if actor.get_id() == state.writer.get_id() {
-                    tracing::error!("TCP Session's writer panicked with '{panic_msg}'");
+                    tracing::error!("TCP Session's writer panicked with '{}'", panic_msg);
                 } else {
-                    tracing::error!("TCP Session received a child panic from an unknown child actor ({}) - '{panic_msg}'", actor.get_id());
+                    tracing::error!("TCP Session received a child panic from an unknown child actor ({}) - '{}'", actor.get_id(), panic_msg);
                 }
                 myself.stop_children(Some("session_stop_panic".to_string()));
                 myself.stop(Some("child_panic".to_string()));
@@ -241,7 +238,7 @@ impl Actor for Session {
                 } else if actor.get_id() == state.writer.get_id() {
                     tracing::debug!("TCP Session's writer exited");
                 } else {
-                    tracing::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{exit_reason:?}'", actor.get_id());
+                    tracing::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{:?}'", actor.get_id(), exit_reason);
                 }
                 myself.stop_children(Some("session_stop_terminated".to_string()));
                 myself.stop(Some("child_terminate".to_string()));
