@@ -6,7 +6,7 @@
 extern crate ractor_actors;
 
 use chrono::{DateTime, Utc};
-use ractor::{Actor, ActorProcessingErr, ActorRef, DerivedActorRef};
+use ractor::{Actor, ActorProcessingErr, ActorRef};
 use ractor_actors::net::tcp::listener::*;
 use ractor_actors::net::tcp::session::*;
 use ractor_actors::net::tcp::*;
@@ -67,10 +67,13 @@ impl SessionAcceptor for MyServerSocketAcceptor {
             MySession {
                 info: stream.info(),
             },
-            MySessionArgs { watchdog:self.watchdog, stream },
+            MySessionArgs {
+                watchdog: self.watchdog,
+                stream,
+            },
         )
-            .await
-            .map_err(|e| ActorProcessingErr::from(e))?;
+        .await
+        .map_err(|e| ActorProcessingErr::from(e))?;
 
         Ok(())
     }
@@ -81,31 +84,29 @@ struct MySession {
 }
 
 enum MySessionMsg {
-    FrameAvailable(Frame),
-}
-
-impl From<FrameAvailable> for MySessionMsg {
-    fn from(FrameAvailable(frame): FrameAvailable) -> Self {
-        Self::FrameAvailable(frame)
-    }
-}
-
-impl TryFrom<MySessionMsg> for FrameAvailable {
-    type Error = ();
-
-    fn try_from(_: MySessionMsg) -> Result<Self, Self::Error> {
-        Err(())
-    }
+    FrameReady(Frame),
 }
 
 struct MySessionState {
     watchdog: bool,
-    session: DerivedActorRef<SendFrame>,
+    session: ActorRef<TcpSessionMessage>,
 }
 
 struct MySessionArgs {
     watchdog: bool,
     stream: NetworkStream,
+}
+
+struct MyFrameReceiver {
+    session: ActorRef<MySessionMsg>,
+}
+
+impl FrameReceiver for MyFrameReceiver {
+    async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr> {
+        self.session
+            .cast(MySessionMsg::FrameReady(f))
+            .map_err(ActorProcessingErr::from)
+    }
 }
 
 impl Actor for MySession {
@@ -120,9 +121,19 @@ impl Actor for MySession {
     ) -> Result<Self::State, ActorProcessingErr> {
         tracing::info!("New session: {}", stream.peer_addr());
 
-        let session = Session::spawn_linked(myself.get_derived(), stream, myself.get_cell())
-            .await
-            .map_err(ActorProcessingErr::from)?;
+        let receiver = MyFrameReceiver { session: myself.clone() };
+
+        let (session, _) = TcpSession::spawn_linked(
+            None,
+            TcpSession::default(),
+            TcpSessionStartupArguments {
+                receiver,
+                tcp_session: stream,
+            },
+            myself.get_cell(),
+        )
+        .await
+        .map_err(ActorProcessingErr::from)?;
 
         if watchdog {
             watchdog::register(
@@ -130,13 +141,10 @@ impl Actor for MySession {
                 ractor::concurrency::Duration::from_secs(3),
                 TimeoutStrategy::Stop,
             )
-                .await?;
+            .await?;
         }
 
-        Ok(Self::State {
-            watchdog,
-            session: session.get_derived(),
-        })
+        Ok(Self::State { watchdog, session })
     }
 
     async fn post_stop(
@@ -156,7 +164,7 @@ impl Actor for MySession {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            Self::Msg::FrameAvailable(frame) => {
+            Self::Msg::FrameReady(frame) => {
                 if state.watchdog {
                     watchdog::ping(myself.get_id()).await?;
                 }
@@ -167,7 +175,9 @@ impl Actor for MySession {
                 let ts: DateTime<Utc> = SystemTime::now().into();
                 let reply = format!("{}: {}", ts.to_rfc3339(), s);
 
-                let _ = state.session.cast(SendFrame(reply.into_bytes()))?;
+                let _ = state
+                    .session
+                    .cast(TcpSessionMessage::Send(reply.into_bytes()))?;
 
                 Ok(())
             }
