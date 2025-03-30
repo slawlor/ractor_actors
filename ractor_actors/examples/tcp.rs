@@ -14,27 +14,30 @@ use ractor_actors::watchdog;
 use ractor_actors::watchdog::TimeoutStrategy;
 use std::error::Error;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
-
-/// Controls if the watchdog is used
-static WATCHDOG: AtomicBool = AtomicBool::new(false);
 
 struct MyServer;
 
 struct MyServerState {}
+struct MyServerArgs {
+    /// Controls if the watchdog is used
+    watchdog: bool,
+
+    /// The port to listen on
+    port: NetworkPort,
+}
 
 impl Actor for MyServer {
     type Msg = ();
     type State = MyServerState;
-    type Arguments = NetworkPort;
+    type Arguments = MyServerArgs;
 
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
-        port: Self::Arguments,
+        MyServerArgs { watchdog, port }: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let acceptor = MyServerSocketAcceptor {};
+        let acceptor = MyServerSocketAcceptor { watchdog };
 
         let _ = myself
             .spawn_linked(
@@ -52,7 +55,9 @@ impl Actor for MyServer {
     }
 }
 
-struct MyServerSocketAcceptor;
+struct MyServerSocketAcceptor {
+    watchdog: bool,
+}
 
 impl SessionAcceptor for MyServerSocketAcceptor {
     async fn new_session(&self, stream: NetworkStream) -> Result<(), ActorProcessingErr> {
@@ -62,10 +67,10 @@ impl SessionAcceptor for MyServerSocketAcceptor {
             MySession {
                 info: stream.info(),
             },
-            stream,
+            MySessionArgs { watchdog:self.watchdog, stream },
         )
-        .await
-        .map_err(|e| ActorProcessingErr::from(e))?;
+            .await
+            .map_err(|e| ActorProcessingErr::from(e))?;
 
         Ok(())
     }
@@ -94,18 +99,24 @@ impl TryFrom<MySessionMsg> for FrameAvailable {
 }
 
 struct MySessionState {
+    watchdog: bool,
     session: DerivedActorRef<SendFrame>,
+}
+
+struct MySessionArgs {
+    watchdog: bool,
+    stream: NetworkStream,
 }
 
 impl Actor for MySession {
     type Msg = MySessionMsg;
     type State = MySessionState;
-    type Arguments = NetworkStream;
+    type Arguments = MySessionArgs;
 
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
-        stream: Self::Arguments,
+        Self::Arguments { watchdog, stream }: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         tracing::info!("New session: {}", stream.peer_addr());
 
@@ -113,16 +124,17 @@ impl Actor for MySession {
             .await
             .map_err(ActorProcessingErr::from)?;
 
-        if WATCHDOG.load(Ordering::SeqCst) {
+        if watchdog {
             watchdog::register(
                 myself.get_cell(),
                 ractor::concurrency::Duration::from_secs(3),
                 TimeoutStrategy::Stop,
             )
-            .await?;
+                .await?;
         }
 
         Ok(Self::State {
+            watchdog,
             session: session.get_derived(),
         })
     }
@@ -145,7 +157,7 @@ impl Actor for MySession {
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Self::Msg::FrameAvailable(frame) => {
-                if WATCHDOG.load(Ordering::SeqCst) {
+                if state.watchdog {
                     watchdog::ping(myself.get_id()).await?;
                 }
 
@@ -197,12 +209,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let watchdog = std::env::var("WATCHDOG").unwrap_or("0".to_string()) == "1";
 
     tracing::info!("Listening on port {}. Watchdog: {}", port, watchdog);
+    tracing::info!("watchdog: {}", watchdog);
 
-    WATCHDOG.store(watchdog, Ordering::Relaxed);
-
-    tracing::info!("watchdog: {}", WATCHDOG.load(Ordering::Relaxed));
-
-    let (system_ref, _) = Actor::spawn(None, MyServer {}, port).await?;
+    let (system_ref, _) = Actor::spawn(None, MyServer {}, MyServerArgs { watchdog, port }).await?;
 
     tokio::signal::ctrl_c()
         .await
