@@ -3,7 +3,9 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! TCP Server to accept incoming sessions
+//! An Actor that listens on a TCP socket to accept incoming sessions.
+//!
+//! See [ListenerStartupArgs] for its startup arguments.
 
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use std::marker::PhantomData;
@@ -11,28 +13,25 @@ use tokio::net::TcpListener;
 
 use super::{IncomingEncryptionMode, NetworkStream};
 
-/// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
-/// a client connects, the `on_connection` will be called. The callback should create a new
-/// [super::session::Session]s which handle the message sending and receiving over the socket.
-///
-/// The [Listener] supervises all the TCP [super::session::Session] actors and is responsible for
-/// logging connects and disconnects.
-
-/// Represents
 #[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 pub trait SessionAcceptor: ractor::State {
-    /// Called when a new incoming session is received by a `TcpListener` actor
+    /// Called when a new incoming session is received by a [Listener] actor
     #[cfg(not(feature = "async-trait"))]
     fn new_session(
         &self,
         session: NetworkStream,
     ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
 
-    /// Called when a new incoming session is received by a `TcpListener` actor
+    /// Called when a new incoming session is received by a [Listener] actor
     #[cfg(feature = "async-trait")]
     async fn new_session(&self, session: NetworkStream) -> Result<(), ActorProcessingErr>;
 }
 
+/// A Tcp Socket [Listener] responsible for creating the socket and accepting new connections. When
+/// a client connects, [SessionAcceptor::new_session] will be called.
+///
+/// The callback can create a new [super::session::TcpSession] which handle the packet sending and
+/// receiving over the socket.
 pub struct Listener<R>
 where
     R: SessionAcceptor,
