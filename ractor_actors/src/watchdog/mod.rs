@@ -96,7 +96,7 @@ pub enum TimeoutStrategy {
 }
 
 /// The stop reason that will be used when an actor is stopped by a watchdog timeout.
-pub const WATCHDOG_TIMEOUT: &'static str = "watchdog_timeout";
+pub const WATCHDOG_TIMEOUT: &str = "watchdog_timeout";
 
 /// Register an actor with the watchdog.
 ///

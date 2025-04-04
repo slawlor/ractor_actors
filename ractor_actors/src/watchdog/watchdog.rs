@@ -88,12 +88,12 @@ impl Actor for Watchdog {
                 }
             },
             WatchdogMsg::Timeout(actor) => {
-                match state.subjects.remove(&actor) {
-                    Some(Registration {
-                        actor,
-                        timeout_strategy,
-                        ..
-                    }) => match timeout_strategy {
+                if let Some(Registration {
+                                actor,
+                                timeout_strategy,
+                                ..
+                            }) = state.subjects.remove(&actor) {
+                    match timeout_strategy {
                         TimeoutStrategy::Kill => {
                             info!(
                                 actor_id = actor.get_id().to_string(),
@@ -112,14 +112,13 @@ impl Actor for Watchdog {
                             actor.stop(Some(WATCHDOG_TIMEOUT.to_string()));
                             state.stops += 1;
                         }
-                    },
-                    _ => (),
+                    }
                 };
                 Ok(())
             }
             WatchdogMsg::Stats(reply) => reply
                 .send(WatchdogStats { kills: state.kills })
-                .map_err(|e| ActorProcessingErr::from(e)),
+                .map_err(ActorProcessingErr::from),
         }
     }
 
