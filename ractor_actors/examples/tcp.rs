@@ -27,6 +27,7 @@ struct MyServerArgs {
     port: NetworkPort,
 }
 
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for MyServer {
     type Msg = ();
     type State = MyServerState;
@@ -59,6 +60,7 @@ struct MyServerSocketAcceptor {
     watchdog: bool,
 }
 
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl SessionAcceptor for MyServerSocketAcceptor {
     async fn new_session(&self, stream: NetworkStream) -> Result<(), ActorProcessingErr> {
         tracing::info!("New connection: {}", stream.peer_addr());
@@ -101,6 +103,7 @@ struct MyFrameReceiver {
     session: ActorRef<MySessionMsg>,
 }
 
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl FrameReceiver for MyFrameReceiver {
     async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr> {
         self.session
@@ -109,6 +112,7 @@ impl FrameReceiver for MyFrameReceiver {
     }
 }
 
+#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for MySession {
     type Msg = MySessionMsg;
     type State = MySessionState;
