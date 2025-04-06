@@ -1,6 +1,6 @@
 use super::WatchdogMsg::{Register, Stats};
 use super::{TimeoutStrategy, WatchdogMsg};
-use crate::watchdog::watchdog::Watchdog;
+use crate::watchdog::r#impl::Watchdog;
 use ractor::*;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;

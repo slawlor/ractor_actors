@@ -29,6 +29,7 @@
 //!     UserInput(String),
 //! }
 //!
+//! #[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 //! impl Actor for MyActor {
 //!     type Msg = MyActorMsg;
 //!     type State = ();
@@ -85,7 +86,7 @@ use ractor::rpc::CallResult;
 use ractor::{Actor, ActorId, ActorRef, MessagingErr, RpcReplyPort};
 use ractor::{ActorCell, ActorProcessingErr};
 use tokio::sync::OnceCell;
-use watchdog::WatchdogMsg;
+use r#impl::WatchdogMsg;
 
 /// See [register]. Controls what the watchdog will do on timeout.
 pub enum TimeoutStrategy {
@@ -146,7 +147,7 @@ static WATCHDOG: OnceCell<Result<ActorRef<WatchdogMsg>, ActorProcessingErr>> =
     OnceCell::const_new();
 
 async fn spawn() -> Result<ActorRef<WatchdogMsg>, ActorProcessingErr> {
-    let (watchdog, _) = Actor::spawn(None, watchdog::Watchdog {}, ()).await?;
+    let (watchdog, _) = Actor::spawn(None, r#impl::Watchdog {}, ()).await?;
 
     Ok(watchdog)
 }
@@ -175,7 +176,7 @@ where
     }
 }
 
-mod watchdog;
+mod r#impl;
 
 #[cfg(test)]
 pub mod tests;
