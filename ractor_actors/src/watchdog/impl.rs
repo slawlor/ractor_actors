@@ -89,10 +89,11 @@ impl Actor for Watchdog {
             },
             WatchdogMsg::Timeout(actor) => {
                 if let Some(Registration {
-                                actor,
-                                timeout_strategy,
-                                ..
-                            }) = state.subjects.remove(&actor) {
+                    actor,
+                    timeout_strategy,
+                    ..
+                }) = state.subjects.remove(&actor)
+                {
                     match timeout_strategy {
                         TimeoutStrategy::Kill => {
                             info!(

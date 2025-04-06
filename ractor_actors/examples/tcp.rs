@@ -125,7 +125,9 @@ impl Actor for MySession {
     ) -> Result<Self::State, ActorProcessingErr> {
         tracing::info!("New session: {}", stream.peer_addr());
 
-        let receiver = MyFrameReceiver { session: myself.clone() };
+        let receiver = MyFrameReceiver {
+            session: myself.clone(),
+        };
 
         let (session, _) = TcpSession::spawn_linked(
             None,

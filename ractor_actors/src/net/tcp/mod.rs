@@ -56,7 +56,7 @@ pub struct NetworkStreamInfo {
 
 impl NetworkStream {
     pub fn info(&self) -> NetworkStreamInfo {
-        NetworkStreamInfo{
+        NetworkStreamInfo {
             peer_addr: self.peer_addr(),
             local_addr: self.local_addr(),
         }

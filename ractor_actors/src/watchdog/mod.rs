@@ -81,12 +81,12 @@
 //! }
 //! ```
 
+use r#impl::WatchdogMsg;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{Actor, ActorId, ActorRef, MessagingErr, RpcReplyPort};
 use ractor::{ActorCell, ActorProcessingErr};
 use tokio::sync::OnceCell;
-use r#impl::WatchdogMsg;
 
 /// See [register]. Controls what the watchdog will do on timeout.
 pub enum TimeoutStrategy {

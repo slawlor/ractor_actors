@@ -1,15 +1,19 @@
+use std::error::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
     sync::mpsc,
 };
-use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let stream = TcpStream::connect("127.0.0.1:9999").await?;
 
-    tracing::info!("Connected peer={}, local={}", stream.peer_addr()?, stream.local_addr()?);
+    tracing::info!(
+        "Connected peer={}, local={}",
+        stream.peer_addr()?,
+        stream.local_addr()?
+    );
 
     let (reader, mut writer) = stream.into_split();
 
@@ -61,7 +65,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         packet.extend_from_slice(&msg_len.to_be_bytes());
         packet.extend_from_slice(msg_bytes);
 
-        eprintln!("Sending payload of {} bytes. Network byte count {}", msg_len, packet.len());
+        eprintln!(
+            "Sending payload of {} bytes. Network byte count {}",
+            msg_len,
+            packet.len()
+        );
         if writer.write_all(&packet).await.is_err() {
             eprintln!("Failed to send message.");
             break;
