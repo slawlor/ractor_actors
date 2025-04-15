@@ -104,8 +104,7 @@ struct MyFrameReceiver {
 #[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl FrameReceiver for MyFrameReceiver {
     async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr> {
-        self.session
-            .cast(MySessionMsg::FrameReady(f))?;
+        self.session.cast(MySessionMsg::FrameReady(f))?;
 
         Ok(())
     }
