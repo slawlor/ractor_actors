@@ -3,7 +3,7 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! TCP server and session actors which [Frame] messages
+//! TCP server and session actor
 
 use std::net::SocketAddr;
 
