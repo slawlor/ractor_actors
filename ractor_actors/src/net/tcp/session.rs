@@ -170,7 +170,7 @@ where
     ) -> Result<(), ActorProcessingErr> {
         match message {
             Send(msg) => {
-                tracing::debug!(
+                tracing::trace!(
                     "SEND: {} -> {} - '{msg:?}'",
                     state.stream_info.local_addr,
                     state.stream_info.peer_addr
@@ -178,7 +178,7 @@ where
                 let _ = state.writer.cast(SessionWriterMessage::Write(msg));
             }
             FrameReady(msg) => {
-                tracing::debug!(
+                tracing::trace!(
                     "RECEIVE {} <- {} - '{msg:?}'",
                     state.stream_info.local_addr,
                     state.stream_info.peer_addr,
