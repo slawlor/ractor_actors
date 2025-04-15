@@ -18,7 +18,6 @@ use std::time::SystemTime;
 
 struct MyServer;
 
-struct MyServerState {}
 struct MyServerArgs {
     /// Controls if the watchdog is used
     watchdog: bool,
@@ -30,7 +29,7 @@ struct MyServerArgs {
 #[cfg_attr(feature = "async-trait", async_trait::async_trait)]
 impl Actor for MyServer {
     type Msg = ();
-    type State = MyServerState;
+    type State = ();
     type Arguments = MyServerArgs;
 
     async fn pre_start(
@@ -52,7 +51,7 @@ impl Actor for MyServer {
             )
             .await?;
 
-        Ok(Self::State {})
+        Ok(())
     }
 }
 
@@ -74,8 +73,7 @@ impl SessionAcceptor for MyServerSocketAcceptor {
                 stream,
             },
         )
-        .await
-        .map_err(|e| ActorProcessingErr::from(e))?;
+        .await?;
 
         Ok(())
     }
@@ -107,8 +105,9 @@ struct MyFrameReceiver {
 impl FrameReceiver for MyFrameReceiver {
     async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr> {
         self.session
-            .cast(MySessionMsg::FrameReady(f))
-            .map_err(ActorProcessingErr::from)
+            .cast(MySessionMsg::FrameReady(f))?;
+
+        Ok(())
     }
 }
 
@@ -138,8 +137,7 @@ impl Actor for MySession {
             },
             myself.get_cell(),
         )
-        .await
-        .map_err(ActorProcessingErr::from)?;
+        .await?;
 
         if watchdog {
             watchdog::register(
