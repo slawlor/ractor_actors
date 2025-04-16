@@ -80,6 +80,14 @@
 //!     }
 //! }
 //! ```
+//!
+//! # Implementation note
+//!
+//! The watchdog is implemented as a single actor internally. This means that it uses the same,
+//! global executors as the actors it is monitoring. If some actors are doing CPU bound work the
+//! internal actor might be starved for CPU and not able to kill the monitored actors.
+//!
+//! Make sure that this fits your use-case.
 
 use r#impl::WatchdogMsg;
 use ractor::concurrency::Duration;
