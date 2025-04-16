@@ -18,9 +18,10 @@ net = ["tokio/net", "tokio/io-util", "tokio/macros", "tokio-rustls"]
 time = ["chrono", "cron", "dep:async-trait"]
 streams = ["tokio-stream", "dep:async-trait"]
 sync = []
+watchdog = []
 async-trait = ["dep:async-trait", "ractor/async-trait"]
 
-default = ["filewatcher", "net", "time", "streams", "sync"]
+default = ["filewatcher", "net", "time", "streams", "sync", "watchdog"]
 
 [dependencies]
 # Required dependencies
@@ -38,5 +39,9 @@ tokio-rustls = { version = "0.26", optional = true }
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "time", "sync", "macros", "rt-multi-thread", "signal"] }
 tracing-glog = "0.4"
-tracing-subscriber = { version = "0.3", features = ["env-filter"]}
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-test = "0.2"
+
+[[example]]
+name = "tcp_client"
+required-features = ["tokio/io-std", "watchdog"]

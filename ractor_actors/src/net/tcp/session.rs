@@ -3,17 +3,39 @@
 // This source code is licensed under both the MIT license found in the
 // LICENSE-MIT file in the root directory of this source tree.
 
-//! Tcp session managing actor
+//! TCP session actor which is managing the communication on a single socket.
 
+// TODO: RUSTLS + Tokio : https://github.com/tokio-rs/tls/blob/master/tokio-rustls/examples/server/src/main.rs
+
+use super::*;
+use ractor::SupervisionEvent;
+use ractor::{Actor, ActorProcessingErr, ActorRef};
 use std::marker::PhantomData;
-
-use ractor::{Actor, ActorRef, SupervisionEvent};
+#[cfg(not(feature = "async-trait"))]
+use std::marker::Send;
 use tokio::io::ErrorKind;
 use tokio::io::{AsyncReadExt, ReadHalf, WriteHalf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use TcpSessionMessage::*;
 
-use super::*;
+/// A frame of data
+pub type Frame = Vec<u8>;
+
+/// Represents a receiver of frames of data
+#[cfg_attr(feature = "async-trait", ractor::async_trait)]
+pub trait FrameReceiver: ractor::State {
+    /// Called when a frame is received by the [TcpSession] actor
+    #[cfg(not(feature = "async-trait"))]
+    fn frame_ready(
+        &self,
+        f: Frame,
+    ) -> impl std::future::Future<Output = Result<(), ActorProcessingErr>> + Send;
+
+    /// Called when a frame is received by the [TcpSession] actor
+    #[cfg(feature = "async-trait")]
+    async fn frame_ready(&self, f: Frame) -> Result<(), ActorProcessingErr>;
+}
 
 /// Supported messages by the [TcpSession] actor
 pub enum TcpSessionMessage {
@@ -31,8 +53,7 @@ where
     writer: ActorRef<SessionWriterMessage>,
     reader: ActorRef<SessionReaderMessage>,
     receiver: R,
-    peer_addr: SocketAddr,
-    local_addr: SocketAddr,
+    stream_info: NetworkStreamInfo,
 }
 
 /// Startup arguments to starting a tcp session
@@ -42,7 +63,7 @@ where
 {
     /// The callback implementation for received for messages
     pub receiver: R,
-    /// The tcp session to creat the sesson upon
+    /// The tcp session to create the session upon
     pub tcp_session: NetworkStream,
 }
 
@@ -87,21 +108,21 @@ where
         myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let (peer_addr, local_addr) = (args.tcp_session.peer_addr(), args.tcp_session.local_addr());
+        let stream_info = args.tcp_session.info();
 
         let (read, write) = match args.tcp_session {
-            super::NetworkStream::Raw { stream, .. } => {
+            NetworkStream::Raw { stream, .. } => {
                 let (read, write) = stream.into_split();
                 (ActorReadHalf::Regular(read), ActorWriteHalf::Regular(write))
             }
-            super::NetworkStream::TlsClient { stream, .. } => {
+            NetworkStream::TlsClient { stream, .. } => {
                 let (read_half, write_half) = tokio::io::split(stream);
                 (
                     ActorReadHalf::ClientTls(read_half),
                     ActorWriteHalf::ClientTls(write_half),
                 )
             }
-            super::NetworkStream::TlsServer { stream, .. } => {
+            NetworkStream::TlsServer { stream, .. } => {
                 let (read_half, write_half) = tokio::io::split(stream);
                 (
                     ActorReadHalf::ServerTls(read_half),
@@ -128,8 +149,7 @@ where
             writer,
             reader,
             receiver: args.receiver,
-            peer_addr,
-            local_addr,
+            stream_info,
         })
     }
 
@@ -138,7 +158,7 @@ where
         _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        tracing::info!("TCP Session closed for {}", state.peer_addr);
+        tracing::info!("TCP Session closed for {}", state.stream_info.peer_addr);
         Ok(())
     }
 
@@ -149,21 +169,19 @@ where
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            Self::Msg::Send(msg) => {
-                tracing::debug!(
-                    "SEND: {} -> {} - '{:?}'",
-                    state.local_addr,
-                    state.peer_addr,
-                    msg
+            Send(msg) => {
+                tracing::trace!(
+                    "SEND: {} -> {} - '{msg:?}'",
+                    state.stream_info.local_addr,
+                    state.stream_info.peer_addr
                 );
                 let _ = state.writer.cast(SessionWriterMessage::Write(msg));
             }
-            Self::Msg::FrameReady(msg) => {
-                tracing::debug!(
-                    "RECEIVE {} <- {} - '{:?}'",
-                    state.local_addr,
-                    state.peer_addr,
-                    msg
+            FrameReady(msg) => {
+                tracing::trace!(
+                    "RECEIVE {} <- {} - '{msg:?}'",
+                    state.stream_info.local_addr,
+                    state.stream_info.peer_addr,
                 );
                 state.receiver.frame_ready(msg).await?;
             }
@@ -188,6 +206,7 @@ where
                 } else {
                     tracing::error!("TCP Session received a child panic from an unknown child actor ({}) - '{}'", actor.get_id(), panic_msg);
                 }
+                myself.stop_children(Some("session_stop_panic".to_string()));
                 myself.stop(Some("child_panic".to_string()));
             }
             SupervisionEvent::ActorTerminated(actor, _, exit_reason) => {
@@ -198,6 +217,7 @@ where
                 } else {
                     tracing::warn!("TCP Session received a child exit from an unknown child actor ({}) - '{:?}'", actor.get_id(), exit_reason);
                 }
+                myself.stop_children(Some("session_stop_terminated".to_string()));
                 myself.stop(Some("child_terminate".to_string()));
             }
             _ => {
@@ -278,10 +298,7 @@ async fn read_n_bytes(stream: &mut ActorReadHalf, len: usize) -> Result<Vec<u8>,
         };
         if n == 0 {
             // EOF
-            return Err(tokio::io::Error::new(
-                tokio::io::ErrorKind::UnexpectedEof,
-                "EOF",
-            ));
+            return Err(tokio::io::Error::new(ErrorKind::UnexpectedEof, "EOF"));
         }
         c_len += n;
     }
@@ -301,11 +318,11 @@ enum SessionWriterMessage {
     Write(Frame),
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
+#[cfg_attr(feature = "async-trait", ractor::async_trait)]
 impl Actor for SessionWriter {
     type Msg = SessionWriterMessage;
-    type Arguments = ActorWriteHalf;
     type State = SessionWriterState;
+    type Arguments = ActorWriteHalf;
 
     async fn pre_start(
         &self,
@@ -371,7 +388,7 @@ struct SessionReader {
     session: ActorRef<TcpSessionMessage>,
 }
 
-/// The node connection messages
+/// The session connection messages
 pub enum SessionReaderMessage {
     /// Wait for an object from the stream
     WaitForFrame,
@@ -384,11 +401,11 @@ struct SessionReaderState {
     reader: Option<ActorReadHalf>,
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
+#[cfg_attr(feature = "async-trait", ractor::async_trait)]
 impl Actor for SessionReader {
     type Msg = SessionReaderMessage;
-    type Arguments = ActorReadHalf;
     type State = SessionReaderState;
+    type Arguments = ActorReadHalf;
 
     async fn pre_start(
         &self,
@@ -451,7 +468,7 @@ impl Actor for SessionReader {
                             // is exactly 8 bytes which constitute the length of the payload message (u64 in big endian format),
                             // followed by the payload. This tells our TCP reader how much data to read off the wire
 
-                            self.session.cast(TcpSessionMessage::FrameReady(buf))?;
+                            self.session.cast(FrameReady(buf))?;
                         }
                         Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
                             // EOF, close the stream by dropping the stream
