@@ -131,7 +131,7 @@ pub async fn unregister(actor: ActorCell) -> Result<(), MessagingErr<()>> {
 ///
 /// * `actor` - the actor that is sending the ping.
 pub async fn ping(actor: ActorId) -> Result<(), MessagingErr<()>> {
-    cast(WatchdogMsg::Ping(actor)).await
+    call(|reply| WatchdogMsg::Ping(actor, reply)).await
 }
 
 /// The return value from [stats] that describes

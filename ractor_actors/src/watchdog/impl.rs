@@ -12,7 +12,7 @@ pub struct Watchdog;
 pub enum WatchdogMsg {
     Register(ActorCell, Duration, TimeoutStrategy),
     Unregister(ActorCell),
-    Ping(ActorId),
+    Ping(ActorId, RpcReplyPort<()>),
     Timeout(ActorId),
     Stats(RpcReplyPort<WatchdogStats>),
 }
@@ -75,11 +75,15 @@ impl Actor for Watchdog {
                 state.unregister(&actor);
                 Ok(())
             }
-            WatchdogMsg::Ping(actor) => match state.subjects.get(&actor) {
+            WatchdogMsg::Ping(actor, reply) => match state.subjects.get(&actor) {
                 Some(Registration { timeout, timer, .. }) => {
                     info!(actor = actor.to_string(), "got ping, rescheduling watchdog");
                     timer.abort();
                     myself.send_after(*timeout, move || WatchdogMsg::Timeout(actor));
+
+                    // Ignoring this, don't want the death of the subject to affect the watchdog
+                    let _ = reply.send(());
+
                     Ok(())
                 }
                 _ => {
