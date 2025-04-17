@@ -176,7 +176,7 @@ impl Actor for MySession {
                 let ts: DateTime<Utc> = SystemTime::now().into();
                 let reply = format!("{}: {}", ts.to_rfc3339(), s);
 
-                let _ = state
+                state
                     .session
                     .cast(TcpSessionMessage::Send(reply.into_bytes()))?;
 
