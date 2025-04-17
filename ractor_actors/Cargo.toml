@@ -1,6 +1,6 @@
 [package]
 name = "ractor_actors"
-version = "0.4.9"
+version = "0.4.10"
 authors = ["Sean Lawlor"]
 description = "Helpful actors built with Ractor"
 documentation = "https://docs.rs/ractor_actors"

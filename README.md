@@ -24,7 +24,7 @@ you can often intermingle these utility actors with non-actor async workflows.
 
 ```toml
 [dependencies]
-ractor_actors = "0.2"
+ractor_actors = "0.4"
 ```
 
 ## What's here?
@@ -34,7 +34,8 @@ The following utility actors are defined in this crate (enable with the associat
 1. Filewatcher (feature `filewatcher`) - Watch files and directories for changes. Built with `notify`.
 2. Tcp actors (feature `net`) - Listen for incoming connections and handle messages in/out from them as sessions.
 3. Cron management actor (feature `time`) - A basic cron-job managing actor, which supports the full cron syntax and will execute operations on a period
-4. Stream processing actors (feautre `streams`) - Actors for common tasks processing streams, including infinite/finite loops, stream processing, and stream multiplexing.
+4. Stream processing actors (feature `streams`) - Actors for common tasks processing streams, including infinite/finite loops, stream processing, and stream multiplexing.
+5. Watchdog process (feature `watchdog`) - A "global" watchdog process, which can be used to terminate actors after some level of inactivity.
 
 ## Contributors
 

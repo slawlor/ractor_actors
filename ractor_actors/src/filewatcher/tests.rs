@@ -89,7 +89,11 @@ async fn filewatch_watches_file() {
     write!(file, "Some data").expect("Failed to write to file");
     drop(file); // close out the file
 
-    periodic_check(|| events.lock().unwrap().len() >= 1, Duration::from_secs(3)).await;
+    periodic_check(
+        || !events.lock().unwrap().is_empty(),
+        Duration::from_secs(3),
+    )
+    .await;
 
     // Cleanup
     fwactor.stop(None);

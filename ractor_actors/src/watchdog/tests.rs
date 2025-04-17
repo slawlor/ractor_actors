@@ -65,7 +65,7 @@ async fn test_foo() {
                     TimeoutStrategy::Kill
                 )
             )
-            .map_err(|e| ActorProcessingErr::from(e))
+            .map_err(ActorProcessingErr::from)
         }
     }
 
@@ -79,19 +79,15 @@ async fn test_foo() {
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    assert_eq!(false, HANDLE.load(SeqCst));
+    assert!(!HANDLE.load(SeqCst));
     assert_eq!(ActorStatus::Running, my_actor.get_status());
 
     tokio::time::sleep(Duration::from_millis(3000)).await;
 
-    assert_eq!(true, HANDLE.load(SeqCst));
-    assert_eq!(false, POST_STOP.load(SeqCst));
+    assert!(HANDLE.load(SeqCst));
+    assert!(!POST_STOP.load(SeqCst));
     assert_eq!(ActorStatus::Stopped, my_actor.get_status());
-    let stats = watchdog
-        .call(|port| Stats(port), None)
-        .await
-        .unwrap()
-        .unwrap();
+    let stats = watchdog.call(Stats, None).await.unwrap().unwrap();
     assert_eq!(1, stats.kills);
 
     my_actor_handle.await.unwrap();

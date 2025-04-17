@@ -102,7 +102,7 @@ async fn main() {
     .collect::<Vec<_>>();
 
     let config = StreamMuxConfiguration {
-        stream: stream,
+        stream,
         stop_processing_target_on_failure: true,
         targets,
         callback: MyCallback,
