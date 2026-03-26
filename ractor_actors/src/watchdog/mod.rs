@@ -169,6 +169,7 @@ async fn cast(msg: WatchdogMsg) -> Result<(), MessagingErr<()>> {
 
 async fn call<TReply, TMsgBuilder>(msg_builder: TMsgBuilder) -> Result<TReply, MessagingErr<()>>
 where
+    TReply: Send + 'static,
     TMsgBuilder: FnOnce(RpcReplyPort<TReply>) -> WatchdogMsg,
 {
     match WATCHDOG.get_or_init(spawn).await {
