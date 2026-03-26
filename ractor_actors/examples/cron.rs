@@ -15,12 +15,12 @@
 extern crate ractor_actors;
 use std::str::FromStr;
 
-use cron::Schedule;
+use cron_0_16::Schedule;
 use ractor::{
     concurrency::{sleep, Duration, Instant},
     Actor, ActorProcessingErr,
 };
-use ractor_actors::time::cron::{CronManager, CronManagerMessage, CronSettings, Job};
+use ractor_actors::time::cron_0_16::{CronManager, CronManagerMessage, CronSettings, Job};
 
 struct MyJob {
     last: Option<Instant>,

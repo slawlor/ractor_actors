@@ -34,13 +34,21 @@
 //! ```
 //!
 
+#![cfg_attr(test, allow(deprecated))]
+
 #[cfg(feature = "filewatcher")]
 pub mod filewatcher;
 
 #[cfg(feature = "net")]
 pub mod net;
 
-#[cfg(feature = "time")]
+#[cfg(any(
+    feature = "cron-0-12",
+    feature = "cron-0-13",
+    feature = "cron-0-14",
+    feature = "cron-0-15",
+    feature = "cron-0-16",
+))]
 pub mod time;
 
 #[cfg(feature = "streams")]

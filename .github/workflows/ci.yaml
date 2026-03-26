@@ -16,10 +16,10 @@ jobs:
         include:
           - name: Run the default tests
             package: ractor_actors
-            # flags: 
+            flags: -F cron-0-16
           - name: Run the default tests with async-trait based actors
             package: ractor_actors
-            flags: -F async-trait
+            flags: -F cron-0-16 -F async-trait
             
     steps:
       - uses: actions/checkout@main
@@ -40,6 +40,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          args: -F cron-0-16
 
   clippy:
     name: Clippy
@@ -114,4 +115,3 @@ jobs:
   #       with:
   #         command: bench
   #         args: --no-run
-          

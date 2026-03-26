@@ -5,8 +5,8 @@
 
 //! Cron-job actor for scheduling periodic jobs
 
+use super::super::cron_crate::Schedule;
 use chrono::Utc;
-use cron::Schedule;
 use ractor::{concurrency::JoinHandle, Actor, ActorProcessingErr, ActorRef, MessagingErr};
 
 use super::{CronSettings, Job};
