@@ -32,6 +32,7 @@ impl CronState {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum CronMessage {
     Execute,
     UpdateSchedule(Schedule),
