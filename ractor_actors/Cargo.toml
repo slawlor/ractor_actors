@@ -25,7 +25,7 @@ default = ["filewatcher", "net", "time", "streams", "sync", "watchdog"]
 
 [dependencies]
 # Required dependencies
-ractor = { version = "0.15" }
+ractor = { version = "0.15.8" }
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"
 # Feature-specific dependencies
