@@ -37,6 +37,46 @@ The following utility actors are defined in this crate (enable with the associat
 4. Stream processing actors (feature `streams`) - Actors for common tasks processing streams, including infinite/finite loops, stream processing, and stream multiplexing.
 5. Watchdog process (feature `watchdog`) - A "global" watchdog process, which can be used to terminate actors after some level of inactivity.
 
+## Development
+
+### Automated Dependency Tracking
+
+This project uses an automated dependency tracking system to monitor major version updates for critical dependencies (`ractor`, `chrono`, `cron`, `notify`). The system:
+
+- Runs weekly (every Monday at 10:00 AM UTC)
+- Checks crates.io for major version updates
+- Automatically creates PRs with version bumps
+- Bumps `ractor_actors` version (minor bump for major dependency updates)
+
+#### Manual Testing
+
+You can manually trigger the dependency checker:
+
+```bash
+# Dry run - shows what would be updated
+cargo xtask check-deps --dry-run
+
+# Local test - creates branch and commits but doesn't push
+cargo xtask check-deps --no-push
+
+# Full run (CI mode) - creates PRs
+cargo xtask check-deps --ci
+```
+
+#### Configuration
+
+The dependency tracker is configured in `.github/dependency-tracker.yml`:
+
+```yaml
+dependencies:
+  ractor:
+    enabled: true
+    track: major
+    bump_strategy: minor
+```
+
+See the [workflow file](.github/workflows/dependency-tracker.yml) for implementation details.
+
 ## Contributors
 
 To learn more about contributing to `ractor` please see [CONTRIBUTING.md](https://github.com/slawlor/ractor_actors/blob/main/CONTRIBUTING.md).
