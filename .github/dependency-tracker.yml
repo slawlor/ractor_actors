@@ -1,0 +1,28 @@
+version: 1
+
+settings:
+  schedule: "0 10 * * 1"  # Monday 10am UTC
+  branch_prefix: "auto-deps"
+  labels: ["dependencies", "major-update", "automated"]
+  draft_prs: false
+
+dependencies:
+  ractor:
+    enabled: true
+    track: major
+    bump_strategy: minor
+
+  chrono:
+    enabled: true
+    track: major
+    bump_strategy: minor
+
+  cron:
+    enabled: true
+    track: major
+    bump_strategy: minor
+
+  notify:
+    enabled: true
+    track: major
+    bump_strategy: minor

@@ -1,0 +1,65 @@
+name: Dependency Tracker
+
+on:
+  schedule:
+    # Runs every Monday at 10:00 AM UTC
+    - cron: '0 10 * * 1'
+  workflow_dispatch:  # Allows manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-dependencies:
+    name: Check for major dependency updates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper git operations
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run dependency checker
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo xtask check-deps --ci
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Dependency Check Complete" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for details about any updates." >> $GITHUB_STEP_SUMMARY
