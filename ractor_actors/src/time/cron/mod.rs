@@ -159,7 +159,7 @@ impl Actor for CronManager {
         _: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        for (_, actor) in state.jobs.iter() {
+        for actor in state.jobs.values() {
             actor.1.stop(None);
         }
         state.jobs.clear();
@@ -196,7 +196,7 @@ impl Actor for CronManager {
             CronManagerMessage::Stop(who) => {
                 if let Some(actor) = state.jobs.remove(&who) {
                     actor.1.stop(None);
-                    for (_, sub) in state.subs.iter() {
+                    for sub in state.subs.values() {
                         sub.stopped(who.clone(), None);
                     }
                 }
@@ -247,7 +247,7 @@ impl Actor for CronManager {
                     .map(|(id, _)| id.clone());
                 if let Some(name) = job {
                     tracing::error!("Cron job {name} panicked with error {what}.");
-                    for (_, sub) in state.subs.iter() {
+                    for sub in state.subs.values() {
                         sub.failed(name.clone(), what.to_string());
                     }
                     state.jobs.remove(&name);
@@ -261,7 +261,7 @@ impl Actor for CronManager {
                     .find(|(_, v)| v.1.get_id() == who.get_id())
                     .map(|(id, _)| id.clone());
                 if let Some(name) = job {
-                    for (_, sub) in state.subs.iter() {
+                    for sub in state.subs.values() {
                         sub.stopped(name.clone(), what.clone());
                     }
                     state.jobs.remove(&name);
@@ -274,7 +274,7 @@ impl Actor for CronManager {
                     .find(|(_, v)| v.1.get_id() == who.get_id())
                     .map(|(id, _)| id.clone());
                 if let Some(name) = job {
-                    for (_, sub) in state.subs.iter() {
+                    for sub in state.subs.values() {
                         sub.started(name.clone());
                     }
                 }
