@@ -1,15 +1,16 @@
 [package]
 name = "ractor_actors"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Sean Lawlor"]
 description = "Helpful actors built with Ractor"
 documentation = "https://docs.rs/ractor_actors"
 license = "MIT"
 edition = "2021"
+rust-version = "1.87"
 keywords = ["actor", "ractor"]
-repository = "https://github.com/slawlor/ractor"
+repository = "https://github.com/slawlor/ractor_actors"
 readme = "../README.md"
-homepage = "https://github.com/slawlor/ractor"
+homepage = "https://github.com/slawlor/ractor_actors"
 categories = ["asynchronous"]
 
 [features]
@@ -25,7 +26,7 @@ default = ["filewatcher", "net", "time", "streams", "sync", "watchdog"]
 
 [dependencies]
 # Required dependencies
-ractor = { version = "0.15.13" }
+ractor = { version = "0.16.0", features = ["actor-macros"] }
 tokio = { version = "1", features = ["sync", "time"] }
 tracing = "0.1"
 # Feature-specific dependencies

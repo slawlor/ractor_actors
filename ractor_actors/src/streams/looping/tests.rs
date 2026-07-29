@@ -31,12 +31,8 @@ enum TestBedMessage {
     Add(u64),
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for TestBedActor {
-    type Msg = TestBedMessage;
-    type State = u64;
-    type Arguments = ();
-
+#[ractor::actor(message = TestBedMessage, state = u64)]
+impl TestBedActor {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -48,21 +44,14 @@ impl Actor for TestBedActor {
         Ok(0)
     }
 
-    async fn handle(
-        &self,
-        _: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            TestBedMessage::GetCount(reply) => {
-                let _ = reply.send(*state);
-            }
-            TestBedMessage::Add(i) => {
-                *state += i;
-            }
-        }
-        Ok(())
+    #[ractor::message(TestBedMessage::GetCount(reply))]
+    fn get_count(&self, reply: RpcReplyPort<u64>, state: &u64) {
+        let _ = reply.send(*state);
+    }
+
+    #[ractor::message(TestBedMessage::Add(value))]
+    fn add(&self, value: u64, state: &mut u64) {
+        *state += value;
     }
 }
 

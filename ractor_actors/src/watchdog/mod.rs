@@ -29,12 +29,8 @@
 //!     UserInput(String),
 //! }
 //!
-//! #[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-//! impl Actor for MyActor {
-//!     type Msg = MyActorMsg;
-//!     type State = ();
-//!     type Arguments = ();
-//!
+//! #[ractor::actor(message = MyActorMsg)]
+//! impl MyActor {
 //!     async fn pre_start(
 //!         &self,
 //!         myself: ActorRef<Self::Msg>,
@@ -61,21 +57,15 @@
 //!
 //!         Ok(())
 //!     }
-//!     async fn handle(
+//!     #[ractor::message(MyActorMsg::UserInput(msg))]
+//!     async fn user_input(
 //!         &self,
-//!         myself: ActorRef<Self::Msg>,
-//!         message: Self::Msg,
-//!         state: &mut Self::State,
+//!         myself: ActorRef<MyActorMsg>,
+//!         msg: String,
 //!     ) -> Result<(), ActorProcessingErr> {
-//!         match message {
-//!             Self::Msg::UserInput(msg) => {
-//!                 // When we get a message from the user, ping the watchdog
-//!                 watchdog::ping(myself.get_id()).await?;
-//!                 println!("User input: {}", msg);
-//!             }
-//!             // ... handle other messages
-//!         }
-//!
+//!         // When we get a message from the user, ping the watchdog
+//!         watchdog::ping(myself.get_id()).await?;
+//!         println!("User input: {}", msg);
 //!         Ok(())
 //!     }
 //! }

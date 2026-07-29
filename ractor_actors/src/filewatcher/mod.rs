@@ -12,7 +12,10 @@ extern crate notify;
 use std::{collections::HashMap, path::PathBuf};
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
-use ractor::{Actor, ActorId, ActorProcessingErr, ActorRef, RpcReplyPort};
+use ractor::{ActorId, ActorProcessingErr, ActorRef, RpcReplyPort};
+
+#[cfg(test)]
+use ractor::Actor;
 
 #[cfg(test)]
 mod tests;
@@ -70,12 +73,12 @@ pub struct FileWatcherState {
     subscriptions: HashMap<ActorId, Box<dyn FileWatcherSubscriber>>,
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for FileWatcher {
-    type Msg = FileWatcherMessage;
-    type State = FileWatcherState;
-    type Arguments = FileWatcherConfig;
-
+#[ractor::actor(
+    message = FileWatcherMessage,
+    state = FileWatcherState,
+    arguments = FileWatcherConfig
+)]
+impl FileWatcher {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -116,37 +119,45 @@ impl Actor for FileWatcher {
         Ok(())
     }
 
-    async fn handle(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            FileWatcherMessage::Event(watcher_event) => {
-                for sub in state.subscriptions.values() {
-                    sub.event_received(watcher_event.clone());
-                }
-            }
-            FileWatcherMessage::FwError(e) => {
-                tracing::error!("Filewatcher error: {:?}", e);
-                return Err(e.into());
-            }
-            FileWatcherMessage::Subscribe(who, f, reply) => {
-                if state.subscriptions.insert(who, f).is_none() {
-                    let _ = reply.send(SubscriptionResult::Ok);
-                } else {
-                    let _ = reply.send(SubscriptionResult::Duplicate);
-                }
-            }
-            FileWatcherMessage::Unsubscribe(who, reply) => {
-                if state.subscriptions.remove(&who).is_some() {
-                    let _ = reply.send(SubscriptionResult::Ok);
-                } else {
-                    let _ = reply.send(SubscriptionResult::NotFound);
-                }
-            }
+    #[ractor::message(FileWatcherMessage::Event(watcher_event))]
+    fn event(&self, watcher_event: Event, state: &FileWatcherState) {
+        for sub in state.subscriptions.values() {
+            sub.event_received(watcher_event.clone());
         }
-        Ok(())
+    }
+
+    #[ractor::message(FileWatcherMessage::FwError(error))]
+    fn filewatcher_error(&self, error: notify::Error) -> Result<(), ActorProcessingErr> {
+        tracing::error!("Filewatcher error: {:?}", error);
+        Err(error.into())
+    }
+
+    #[ractor::message(FileWatcherMessage::Subscribe(who, subscriber, reply))]
+    fn subscribe(
+        &self,
+        who: ActorId,
+        subscriber: Box<dyn FileWatcherSubscriber>,
+        reply: RpcReplyPort<SubscriptionResult>,
+        state: &mut FileWatcherState,
+    ) {
+        if state.subscriptions.insert(who, subscriber).is_none() {
+            let _ = reply.send(SubscriptionResult::Ok);
+        } else {
+            let _ = reply.send(SubscriptionResult::Duplicate);
+        }
+    }
+
+    #[ractor::message(FileWatcherMessage::Unsubscribe(who, reply))]
+    fn unsubscribe(
+        &self,
+        who: ActorId,
+        reply: RpcReplyPort<SubscriptionResult>,
+        state: &mut FileWatcherState,
+    ) {
+        if state.subscriptions.remove(&who).is_some() {
+            let _ = reply.send(SubscriptionResult::Ok);
+        } else {
+            let _ = reply.send(SubscriptionResult::NotFound);
+        }
     }
 }

@@ -149,17 +149,17 @@ where
 {
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl<S, N> Actor for MuxActor<S, N>
+#[ractor::actor(
+    message = Option<S::Item>,
+    state = MuxActorState<S, N>,
+    arguments = StreamMuxConfiguration<S, N>,
+)]
+impl<S, N> MuxActor<S, N>
 where
     S: Stream + ractor::State,
     S::Item: Clone + ractor::Message,
     N: StreamMuxNotification,
 {
-    type Msg = Option<S::Item>;
-    type State = MuxActorState<S, N>;
-    type Arguments = StreamMuxConfiguration<S, N>;
-
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -180,41 +180,42 @@ where
         })
     }
 
-    async fn handle(
+    #[ractor::message(Some(item))]
+    fn item_received(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: Option<S::Item>,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        if let Some(item) = message {
-            let mut to_be_removed = HashSet::new();
-            for target in state.targets.iter() {
-                if let Err(err) = target.message_received(item.clone()) {
-                    let id = target.get_id();
-                    tracing::error!("Failed to send message to target {} with {err}", id);
-                    state.callback.target_failed(id.clone(), err);
-                    to_be_removed.insert(id);
-                }
-                // else successfully sent notification
+        myself: ActorRef<Option<S::Item>>,
+        item: S::Item,
+        state: &mut MuxActorState<S, N>,
+    ) {
+        let mut to_be_removed = HashSet::new();
+        for target in &state.targets {
+            if let Err(err) = target.message_received(item.clone()) {
+                let id = target.get_id();
+                tracing::error!("Failed to send message to target {} with {err}", id);
+                state.callback.target_failed(id.clone(), err);
+                to_be_removed.insert(id);
             }
-
-            if state.stop_processing_target_on_failure {
-                state
-                    .targets
-                    .retain(|target| !to_be_removed.contains(&target.get_id()));
-
-                if state.targets.is_empty() {
-                    tracing::debug!("Halting stream processing as no more targets exist");
-                    myself.stop(None);
-                    state.callback.end_of_stream();
-                }
-            }
-        } else {
-            myself.stop(Some("End of stream".to_string()));
-            state.callback.end_of_stream();
-            tracing::debug!("Reached end of stream");
+            // else successfully sent notification
         }
-        Ok(())
+
+        if state.stop_processing_target_on_failure {
+            state
+                .targets
+                .retain(|target| !to_be_removed.contains(&target.get_id()));
+
+            if state.targets.is_empty() {
+                tracing::debug!("Halting stream processing as no more targets exist");
+                myself.stop(None);
+                state.callback.end_of_stream();
+            }
+        }
+    }
+
+    #[ractor::message(Option::None)]
+    fn end_of_stream(&self, myself: ActorRef<Option<S::Item>>, state: &MuxActorState<S, N>) {
+        myself.stop(Some("End of stream".to_string()));
+        state.callback.end_of_stream();
+        tracing::debug!("Reached end of stream");
     }
 
     async fn handle_supervisor_evt(

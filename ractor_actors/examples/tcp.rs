@@ -108,12 +108,12 @@ impl FrameReceiver for MyFrameReceiver {
     }
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for MySession {
-    type Msg = MySessionMsg;
-    type State = MySessionState;
-    type Arguments = MySessionArgs;
-
+#[ractor::actor(
+    message = MySessionMsg,
+    state = MySessionState,
+    arguments = MySessionArgs,
+)]
+impl MySession {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -158,31 +158,28 @@ impl Actor for MySession {
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(MySessionMsg::FrameReady(frame))]
+    async fn frame_ready(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
+        myself: ActorRef<MySessionMsg>,
+        frame: Frame,
+        state: &MySessionState,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            Self::Msg::FrameReady(frame) => {
-                if state.watchdog {
-                    watchdog::ping(myself.get_id()).await?;
-                }
-
-                let s: String = String::from_utf8(frame).unwrap();
-                tracing::info!("Got message: {:?}", s);
-
-                let ts: DateTime<Utc> = SystemTime::now().into();
-                let reply = format!("{}: {}", ts.to_rfc3339(), s);
-
-                state
-                    .session
-                    .cast(TcpSessionMessage::Send(reply.into_bytes()))?;
-
-                Ok(())
-            }
+        if state.watchdog {
+            watchdog::ping(myself.get_id()).await?;
         }
+
+        let message = String::from_utf8(frame).unwrap();
+        tracing::info!("Got message: {:?}", message);
+
+        let timestamp: DateTime<Utc> = SystemTime::now().into();
+        let reply = format!("{}: {}", timestamp.to_rfc3339(), message);
+
+        state
+            .session
+            .cast(TcpSessionMessage::Send(reply.into_bytes()))?;
+
+        Ok(())
     }
 }
 

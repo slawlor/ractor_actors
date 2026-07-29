@@ -7,7 +7,7 @@
 //!
 //! See [ListenerStartupArgs] for its startup arguments.
 
-use ractor::{Actor, ActorProcessingErr, ActorRef};
+use ractor::{ActorProcessingErr, ActorRef};
 use std::marker::PhantomData;
 use tokio::net::TcpListener;
 
@@ -83,15 +83,15 @@ where
 
 pub struct ListenerMessage;
 
-#[cfg_attr(feature = "async-trait", ractor::async_trait)]
-impl<R> Actor for Listener<R>
+#[ractor::actor(
+    message = ListenerMessage,
+    state = ListenerState<R>,
+    arguments = ListenerStartupArgs<R>
+)]
+impl<R> Listener<R>
 where
     R: SessionAcceptor,
 {
-    type Msg = ListenerMessage;
-    type State = ListenerState<R>;
-    type Arguments = ListenerStartupArgs<R>;
-
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -129,11 +129,11 @@ where
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(crate::net::tcp::listener::ListenerMessage)]
+    async fn accept(
         &self,
-        myself: ActorRef<Self::Msg>,
-        _message: Self::Msg,
-        state: &mut Self::State,
+        myself: ActorRef<ListenerMessage>,
+        state: &mut ListenerState<R>,
     ) -> Result<(), ActorProcessingErr> {
         if let Some(listener) = &mut state.listener {
             match listener.accept().await {

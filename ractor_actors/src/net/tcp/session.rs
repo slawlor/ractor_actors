@@ -94,15 +94,15 @@ where
     }
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl<R> Actor for TcpSession<R>
+#[ractor::actor(
+    message = TcpSessionMessage,
+    state = TcpSessionState<R>,
+    arguments = TcpSessionStartupArguments<R>
+)]
+impl<R> TcpSession<R>
 where
     R: FrameReceiver,
 {
-    type Msg = TcpSessionMessage;
-    type State = TcpSessionState<R>;
-    type Arguments = TcpSessionStartupArguments<R>;
-
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -162,30 +162,28 @@ where
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(TcpSessionMessage::Send(msg))]
+    fn send(&self, msg: Frame, state: &TcpSessionState<R>) {
+        tracing::trace!(
+            "SEND: {} -> {} - '{msg:?}'",
+            state.stream_info.local_addr,
+            state.stream_info.peer_addr
+        );
+        let _ = state.writer.cast(SessionWriterMessage::Write(msg));
+    }
+
+    #[ractor::message(TcpSessionMessage::FrameReady(msg))]
+    async fn frame_ready(
         &self,
-        _myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
+        msg: Frame,
+        state: &mut TcpSessionState<R>,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            Send(msg) => {
-                tracing::trace!(
-                    "SEND: {} -> {} - '{msg:?}'",
-                    state.stream_info.local_addr,
-                    state.stream_info.peer_addr
-                );
-                let _ = state.writer.cast(SessionWriterMessage::Write(msg));
-            }
-            FrameReady(msg) => {
-                tracing::trace!(
-                    "RECEIVE {} <- {} - '{msg:?}'",
-                    state.stream_info.local_addr,
-                    state.stream_info.peer_addr,
-                );
-                state.receiver.frame_ready(msg).await?;
-            }
-        }
+        tracing::trace!(
+            "RECEIVE {} <- {} - '{msg:?}'",
+            state.stream_info.local_addr,
+            state.stream_info.peer_addr,
+        );
+        state.receiver.frame_ready(msg).await?;
         Ok(())
     }
 
@@ -318,12 +316,12 @@ enum SessionWriterMessage {
     Write(Frame),
 }
 
-#[cfg_attr(feature = "async-trait", ractor::async_trait)]
-impl Actor for SessionWriter {
-    type Msg = SessionWriterMessage;
-    type State = SessionWriterState;
-    type Arguments = ActorWriteHalf;
-
+#[ractor::actor(
+    message = SessionWriterMessage,
+    state = SessionWriterState,
+    arguments = ActorWriteHalf
+)]
+impl SessionWriter {
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
@@ -346,36 +344,30 @@ impl Actor for SessionWriter {
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(SessionWriterMessage::Write(msg))]
+    async fn write(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
+        myself: ActorRef<SessionWriterMessage>,
+        msg: Frame,
+        state: &mut SessionWriterState,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            SessionWriterMessage::Write(msg) if state.writer.is_some() => {
-                if let Some(stream) = &mut state.writer {
-                    if let ActorWriteHalf::Regular(w) = stream {
-                        w.writable().await?;
-                    }
-
-                    if let Err(write_err) = stream.write_u64(msg.len() as u64).await {
-                        tracing::warn!("Error writing to the stream '{}'", write_err);
-                    } else {
-                        tracing::trace!("Wrote length, writing payload (len={})", msg.len());
-                        // now send the object
-                        if let Err(write_err) = stream.write_all(&msg).await {
-                            tracing::warn!("Error writing to the stream '{}'", write_err);
-                            myself.stop(Some("channel_closed".to_string()));
-                            return Ok(());
-                        }
-                        // flush the stream
-                        stream.flush().await?;
-                    }
-                }
+        if let Some(stream) = &mut state.writer {
+            if let ActorWriteHalf::Regular(w) = stream {
+                w.writable().await?;
             }
-            _ => {
-                // no-op, wait for next send request
+
+            if let Err(write_err) = stream.write_u64(msg.len() as u64).await {
+                tracing::warn!("Error writing to the stream '{}'", write_err);
+            } else {
+                tracing::trace!("Wrote length, writing payload (len={})", msg.len());
+                // now send the object
+                if let Err(write_err) = stream.write_all(&msg).await {
+                    tracing::warn!("Error writing to the stream '{}'", write_err);
+                    myself.stop(Some("channel_closed".to_string()));
+                    return Ok(());
+                }
+                // flush the stream
+                stream.flush().await?;
             }
         }
         Ok(())
@@ -401,12 +393,12 @@ struct SessionReaderState {
     reader: Option<ActorReadHalf>,
 }
 
-#[cfg_attr(feature = "async-trait", ractor::async_trait)]
-impl Actor for SessionReader {
-    type Msg = SessionReaderMessage;
-    type State = SessionReaderState;
-    type Arguments = ActorReadHalf;
-
+#[ractor::actor(
+    message = SessionReaderMessage,
+    state = SessionReaderState,
+    arguments = ActorReadHalf
+)]
+impl SessionReader {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -429,67 +421,172 @@ impl Actor for SessionReader {
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(SessionReaderMessage::WaitForFrame)]
+    async fn wait_for_frame(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
+        myself: ActorRef<SessionReaderMessage>,
+        state: &mut SessionReaderState,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            Self::Msg::WaitForFrame if state.reader.is_some() => {
-                if let Some(stream) = &mut state.reader {
-                    match stream.read_u64().await {
-                        Ok(length) => {
-                            tracing::trace!("Payload length message ({}) received", length);
-                            let _ = myself.cast(SessionReaderMessage::ReadFrame(length));
-                            return Ok(());
-                        }
-                        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                            tracing::trace!("Error (EOF) on stream");
-                            // EOF, close the stream by dropping the stream
-                            drop(state.reader.take());
-                            myself.stop(Some("channel_closed".to_string()));
-                        }
-                        Err(_other_err) => {
-                            tracing::trace!("Error ({:?}) on stream", _other_err);
-                            // some other TCP error, more handling necessary
-                        }
-                    }
+        if let Some(stream) = &mut state.reader {
+            match stream.read_u64().await {
+                Ok(length) => {
+                    tracing::trace!("Payload length message ({}) received", length);
+                    let _ = myself.cast(SessionReaderMessage::ReadFrame(length));
+                    return Ok(());
                 }
-
-                let _ = myself.cast(SessionReaderMessage::WaitForFrame);
-            }
-            Self::Msg::ReadFrame(length) if state.reader.is_some() => {
-                if let Some(stream) = &mut state.reader {
-                    match read_n_bytes(stream, length as usize).await {
-                        Ok(buf) => {
-                            tracing::trace!("Payload of length({}) received", buf.len());
-                            // NOTE: Our implementation writes 2 messages when sending something over the wire, the first
-                            // is exactly 8 bytes which constitute the length of the payload message (u64 in big endian format),
-                            // followed by the payload. This tells our TCP reader how much data to read off the wire
-
-                            self.session.cast(FrameReady(buf))?;
-                        }
-                        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
-                            // EOF, close the stream by dropping the stream
-                            drop(state.reader.take());
-                            myself.stop(Some("channel_closed".to_string()));
-                            return Ok(());
-                        }
-                        Err(_other_err) => {
-                            // TODO: some other TCP error, more handling necessary
-                        }
-                    }
+                Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                    tracing::trace!("Error (EOF) on stream");
+                    // EOF, close the stream by dropping the stream
+                    drop(state.reader.take());
+                    myself.stop(Some("channel_closed".to_string()));
                 }
-
-                // we've read the object, now wait for next object
-                let _ = myself.cast(SessionReaderMessage::WaitForFrame);
-            }
-            _ => {
-                // no stream is available, keep looping until one is available
-                let _ = myself.cast(SessionReaderMessage::WaitForFrame);
+                Err(_other_err) => {
+                    tracing::trace!("Error ({:?}) on stream", _other_err);
+                    // some other TCP error, more handling necessary
+                }
             }
         }
+
+        let _ = myself.cast(SessionReaderMessage::WaitForFrame);
         Ok(())
+    }
+
+    #[ractor::message(SessionReaderMessage::ReadFrame(length))]
+    async fn read_frame(
+        &self,
+        myself: ActorRef<SessionReaderMessage>,
+        length: u64,
+        state: &mut SessionReaderState,
+    ) -> Result<(), ActorProcessingErr> {
+        if let Some(stream) = &mut state.reader {
+            match read_n_bytes(stream, length as usize).await {
+                Ok(buf) => {
+                    tracing::trace!("Payload of length({}) received", buf.len());
+                    // NOTE: Our implementation writes 2 messages when sending something over the wire, the first
+                    // is exactly 8 bytes which constitute the length of the payload message (u64 in big endian format),
+                    // followed by the payload. This tells our TCP reader how much data to read off the wire
+
+                    self.session.cast(FrameReady(buf))?;
+                }
+                Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                    // EOF, close the stream by dropping the stream
+                    drop(state.reader.take());
+                    myself.stop(Some("channel_closed".to_string()));
+                    return Ok(());
+                }
+                Err(_other_err) => {
+                    // TODO: some other TCP error, more handling necessary
+                }
+            }
+        }
+
+        // we've read the object, now wait for next object. This also preserves the
+        // retry behavior when no stream is available.
+        let _ = myself.cast(SessionReaderMessage::WaitForFrame);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    struct TestReceiver {
+        frames: mpsc::UnboundedSender<Frame>,
+    }
+
+    #[cfg_attr(feature = "async-trait", ractor::async_trait)]
+    impl FrameReceiver for TestReceiver {
+        async fn frame_ready(&self, frame: Frame) -> Result<(), ActorProcessingErr> {
+            self.frames
+                .send(frame)
+                .map_err(|_| ActorProcessingErr::from("frame receiver closed"))
+        }
+    }
+
+    fn raw_stream(stream: TcpStream) -> NetworkStream {
+        NetworkStream::Raw {
+            peer_addr: stream
+                .peer_addr()
+                .expect("peer address should be available"),
+            local_addr: stream
+                .local_addr()
+                .expect("local address should be available"),
+            stream,
+        }
+    }
+
+    #[ractor::concurrency::test]
+    async fn tcp_session_exchanges_framed_messages_in_both_directions() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener should bind");
+        let address = listener
+            .local_addr()
+            .expect("listener should have an address");
+        let client_stream = TcpStream::connect(address)
+            .await
+            .expect("client should connect");
+        let (server_stream, _) = listener.accept().await.expect("server should accept");
+
+        let (client_frames, mut client_receiver) = mpsc::unbounded_channel();
+        let (server_frames, mut server_receiver) = mpsc::unbounded_channel();
+
+        let (client, client_handle) = Actor::spawn(
+            None,
+            TcpSession::<TestReceiver>::new(),
+            TcpSessionStartupArguments {
+                receiver: TestReceiver {
+                    frames: client_frames,
+                },
+                tcp_session: raw_stream(client_stream),
+            },
+        )
+        .await
+        .expect("client session should start");
+        let (server, server_handle) = Actor::spawn(
+            None,
+            TcpSession::<TestReceiver>::new(),
+            TcpSessionStartupArguments {
+                receiver: TestReceiver {
+                    frames: server_frames,
+                },
+                tcp_session: raw_stream(server_stream),
+            },
+        )
+        .await
+        .expect("server session should start");
+
+        client
+            .cast(TcpSessionMessage::Send(b"client-to-server".to_vec()))
+            .expect("client frame should enqueue");
+        let server_frame = tokio::time::timeout(Duration::from_secs(2), server_receiver.recv())
+            .await
+            .expect("server frame should arrive before timeout")
+            .expect("server frame channel should remain open");
+        assert_eq!(server_frame, b"client-to-server");
+
+        server
+            .cast(TcpSessionMessage::Send(b"server-to-client".to_vec()))
+            .expect("server frame should enqueue");
+        let client_frame = tokio::time::timeout(Duration::from_secs(2), client_receiver.recv())
+            .await
+            .expect("client frame should arrive before timeout")
+            .expect("client frame channel should remain open");
+        assert_eq!(client_frame, b"server-to-client");
+
+        client.stop(None);
+        server.stop(None);
+        client_handle
+            .await
+            .expect("client session should stop cleanly");
+        server_handle
+            .await
+            .expect("server session should stop cleanly");
     }
 }

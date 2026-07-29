@@ -30,7 +30,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! ractor_actors = "0.1"
+//! ractor_actors = "0.7"
 //! ```
 //!
 

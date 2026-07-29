@@ -137,12 +137,8 @@ pub enum CronManagerMessage {
     Unsubscribe(ActorId),
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for CronManager {
-    type Msg = CronManagerMessage;
-    type State = CronManagerState;
-    type Arguments = ();
-
+#[ractor::actor(message = CronManagerMessage, state = CronManagerState)]
+impl CronManager {
     async fn pre_start(
         &self,
         _: ActorRef<Self::Msg>,
@@ -166,70 +162,92 @@ impl Actor for CronManager {
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(CronManagerMessage::Start(settings, reply))]
+    async fn start(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: CronManagerMessage,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            CronManagerMessage::Start(settings, reply) => {
-                let id = settings.job.id().to_string();
-                let sched = settings.schedule.clone();
+        myself: ActorRef<CronManagerMessage>,
+        settings: CronSettings,
+        reply: RpcReplyPort<Result<(), ActorProcessingErr>>,
+        state: &mut CronManagerState,
+    ) {
+        let id = settings.job.id().to_string();
+        let schedule = settings.schedule.clone();
 
-                if let std::collections::hash_map::Entry::Vacant(e) = state.jobs.entry(id) {
-                    match Actor::spawn_linked(None, Cron, settings, myself.get_cell()).await {
-                        Err(spawn_err) => {
-                            let _ = reply.send(Err(spawn_err.into()));
-                        }
-                        Ok((actor, _)) => {
-                            e.insert((sched, actor));
-                            let _ = reply.send(Ok(()));
-                        }
-                    }
-                } else {
-                    let _ = reply.send(Err(From::from(
-                        "A job with the name {} already is scheduled",
-                    )));
+        if let std::collections::hash_map::Entry::Vacant(entry) = state.jobs.entry(id) {
+            match Actor::spawn_linked(None, Cron, settings, myself.get_cell()).await {
+                Err(spawn_error) => {
+                    let _ = reply.send(Err(spawn_error.into()));
+                }
+                Ok((actor, _)) => {
+                    entry.insert((schedule, actor));
+                    let _ = reply.send(Ok(()));
                 }
             }
-            CronManagerMessage::Stop(who) => {
-                if let Some(actor) = state.jobs.remove(&who) {
-                    actor.1.stop(None);
-                    for sub in state.subs.values() {
-                        sub.stopped(who.clone(), None);
-                    }
-                }
-            }
-            CronManagerMessage::SetSchedule(who, schedule) => {
-                if let Some(actor) = state.jobs.get_mut(&who) {
-                    actor.0 = schedule.clone();
-                    actor.1.cast(CronMessage::UpdateSchedule(schedule))?;
-                }
-            }
-            CronManagerMessage::ListJobs(reply) => {
-                let msg = state
-                    .jobs
-                    .iter()
-                    .map(|(name, job_state)| (name.clone(), job_state.0.clone()))
-                    .collect::<HashMap<_, _>>();
-                let _ = reply.send(msg);
-            }
-            CronManagerMessage::GetSchedule(who, reply) => {
-                if let Some(actor) = state.jobs.get(&who) {
-                    let _ = reply.send(Some(actor.0.clone()));
-                } else {
-                    let _ = reply.send(None);
-                }
-            }
-            CronManagerMessage::Subscribe(who, processor) => {
-                state.subs.insert(who, processor);
-            }
-            CronManagerMessage::Unsubscribe(who) => {
-                state.subs.remove(&who);
+        } else {
+            let _ = reply.send(Err(From::from(
+                "A job with the name {} already is scheduled",
+            )));
+        }
+    }
+
+    #[ractor::message(CronManagerMessage::Stop(who))]
+    fn stop(&self, who: String, state: &mut CronManagerState) {
+        if let Some(actor) = state.jobs.remove(&who) {
+            actor.1.stop(None);
+            for subscriber in state.subs.values() {
+                subscriber.stopped(who.clone(), None);
             }
         }
+    }
+
+    #[ractor::message(CronManagerMessage::SetSchedule(who, schedule))]
+    fn set_schedule(
+        &self,
+        who: String,
+        schedule: Schedule,
+        state: &mut CronManagerState,
+    ) -> Result<(), ActorProcessingErr> {
+        if let Some(actor) = state.jobs.get_mut(&who) {
+            actor.0 = schedule.clone();
+            actor.1.cast(CronMessage::UpdateSchedule(schedule))?;
+        }
         Ok(())
+    }
+
+    #[ractor::message(CronManagerMessage::ListJobs(reply))]
+    fn list_jobs(&self, reply: RpcReplyPort<HashMap<String, Schedule>>, state: &CronManagerState) {
+        let jobs = state
+            .jobs
+            .iter()
+            .map(|(name, job_state)| (name.clone(), job_state.0.clone()))
+            .collect::<HashMap<_, _>>();
+        let _ = reply.send(jobs);
+    }
+
+    #[ractor::message(CronManagerMessage::GetSchedule(who, reply))]
+    fn get_schedule(
+        &self,
+        who: String,
+        reply: RpcReplyPort<Option<Schedule>>,
+        state: &CronManagerState,
+    ) {
+        let schedule = state.jobs.get(&who).map(|actor| actor.0.clone());
+        let _ = reply.send(schedule);
+    }
+
+    #[ractor::message(CronManagerMessage::Subscribe(who, processor))]
+    fn subscribe(
+        &self,
+        who: ActorId,
+        processor: Box<dyn CronEventSubscriber>,
+        state: &mut CronManagerState,
+    ) {
+        state.subs.insert(who, processor);
+    }
+
+    #[ractor::message(CronManagerMessage::Unsubscribe(who))]
+    fn unsubscribe(&self, who: ActorId, state: &mut CronManagerState) {
+        state.subs.remove(&who);
     }
 
     async fn handle_supervisor_evt(
