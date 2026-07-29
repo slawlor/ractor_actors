@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -40,6 +40,10 @@ jobs:
 
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
+          fail_ci_if_error: true
           files: coverage/*.lcov
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+          name: ractor_actors
