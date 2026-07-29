@@ -19,9 +19,9 @@ The dependency tracker automatically monitors major version updates for critical
 
 | Dependency | Current | Reason |
 |------------|---------|--------|
-| `ractor` | 0.15.8 | Core framework - critical to all functionality |
+| `ractor` | 0.16.0 | Core framework - critical to all functionality |
 | `chrono` | 0.4.x | Time feature - date/time handling |
-| `cron` | 0.16.x | Time feature - scheduled tasks |
+| `cron` | 0.17.x | Time feature - scheduled tasks |
 | `notify` | 8.x | Filewatcher feature - file system monitoring |
 
 ## How It Works
@@ -47,7 +47,7 @@ When a major version update is detected:
 
 1. **Create branch**: `auto-deps/{dependency}-{version}`
 2. **Update Cargo.toml**: Set new dependency version
-3. **Bump ractor_actors version**: Minor bump (0.5.0 → 0.6.0)
+3. **Bump ractor_actors version**: Minor bump (for example, 0.7.0 → 0.8.0)
 4. **Update Cargo.lock**: Run `cargo update -p {dependency}`
 5. **Commit changes**: With descriptive message
 6. **Create PR**: With changelog links and migration notes
@@ -58,12 +58,12 @@ All major dependency updates trigger a **minor version bump** of `ractor_actors`
 
 | Dependency Update | ractor_actors Version | Reasoning |
 |-------------------|----------------------|-----------|
-| ractor 0.15 → 0.16 | 0.5.0 → 0.6.0 | Core framework change - API may change |
-| chrono 0.4 → 0.5 | 0.5.0 → 0.6.0 | Time API changes affect time feature |
-| cron 0.16 → 0.17 | 0.5.0 → 0.6.0 | Cron API changes affect time feature |
-| notify 8 → 9 | 0.5.0 → 0.6.0 | File watching API changes affect filewatcher |
+| ractor 0.16 → 0.17 | 0.7.0 → 0.8.0 | Core framework change - API may change |
+| chrono 0.4 → 0.5 | 0.7.0 → 0.8.0 | Time API changes affect time feature |
+| cron 0.17 → 0.18 | 0.7.0 → 0.8.0 | Cron API changes affect time feature |
+| notify 8 → 9 | 0.7.0 → 0.8.0 | File watching API changes affect filewatcher |
 
-This follows semantic versioning: minor bumps for backward-compatible additions, which major dependency updates may introduce.
+For a pre-1.0 crate, the minor component is the compatibility boundary, so this leaves room for migration work required by a breaking dependency update.
 
 ## Manual Usage
 

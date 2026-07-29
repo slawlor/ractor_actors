@@ -22,12 +22,8 @@ enum StreamActorMessage {
     Add(u64),
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for StreamActor {
-    type Msg = StreamActorMessage;
-    type State = u64;
-    type Arguments = ();
-
+#[ractor::actor(message = StreamActorMessage, state = u64)]
+impl StreamActor {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -51,22 +47,15 @@ impl Actor for StreamActor {
         Ok(0)
     }
 
-    async fn handle(
-        &self,
-        _: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            StreamActorMessage::GetCount(reply) => {
-                println!("Received count request");
-                let _ = reply.send(*state);
-            }
-            StreamActorMessage::Add(i) => {
-                *state += i;
-            }
-        }
-        Ok(())
+    #[ractor::message(StreamActorMessage::GetCount(reply))]
+    fn get_count(&self, reply: RpcReplyPort<u64>, state: &u64) {
+        println!("Received count request");
+        let _ = reply.send(*state);
+    }
+
+    #[ractor::message(StreamActorMessage::Add(value))]
+    fn add(&self, value: u64, state: &mut u64) {
+        *state += value;
     }
 
     async fn handle_supervisor_evt(

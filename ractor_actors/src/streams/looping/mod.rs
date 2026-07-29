@@ -79,15 +79,15 @@ where
     _t: PhantomData<fn() -> T>,
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl<TOperation> Actor for Loop<TOperation>
+#[ractor::actor(
+    message = (),
+    state = (TOperation, TOperation::State),
+    arguments = (TOperation, TOperation::State),
+)]
+impl<TOperation> Loop<TOperation>
 where
     TOperation: Operation,
 {
-    type Msg = ();
-    type State = (TOperation, TOperation::State);
-    type Arguments = (TOperation, TOperation::State);
-
     async fn pre_start(
         &self,
         myself: ActorRef<()>,

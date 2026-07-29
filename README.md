@@ -24,8 +24,10 @@ you can often intermingle these utility actors with non-actor async workflows.
 
 ```toml
 [dependencies]
-ractor_actors = "0.4"
+ractor_actors = "0.7"
 ```
+
+Version 0.7 targets Ractor 0.16 and requires Rust 1.87 or newer.
 
 ## What's here?
 

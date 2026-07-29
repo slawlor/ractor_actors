@@ -7,7 +7,10 @@
 
 use chrono::Utc;
 use cron::Schedule;
-use ractor::{concurrency::JoinHandle, Actor, ActorProcessingErr, ActorRef, MessagingErr};
+use ractor::{concurrency::JoinHandle, ActorProcessingErr, ActorRef, MessagingErr};
+
+#[cfg(test)]
+use ractor::Actor;
 
 use super::{CronSettings, Job};
 
@@ -38,12 +41,12 @@ pub enum CronMessage {
     UpdateSchedule(Schedule),
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl Actor for Cron {
-    type Msg = CronMessage;
-    type State = CronState;
-    type Arguments = CronSettings;
-
+#[ractor::actor(
+    message = CronMessage,
+    state = CronState,
+    arguments = CronSettings,
+)]
+impl Cron {
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
@@ -77,34 +80,36 @@ impl Actor for Cron {
         Ok(())
     }
 
-    async fn handle(
+    #[ractor::message(CronMessage::Execute)]
+    async fn execute(
         &self,
-        myself: ActorRef<Self::Msg>,
-        message: CronMessage,
-        state: &mut Self::State,
+        myself: ActorRef<CronMessage>,
+        state: &mut CronState,
     ) -> Result<(), ActorProcessingErr> {
-        match message {
-            CronMessage::Execute => {
-                tracing::debug!("Executing cron job {}", state.job.id());
+        tracing::debug!("Executing cron job {}", state.job.id());
 
-                if let Err(e) = state.job.work().await {
-                    tracing::error!("Cron job {} failed with error {e}", state.job.id());
-                }
-
-                // schedule next ping
-                state.schedule_next(&myself)?;
-            }
-            CronMessage::UpdateSchedule(new_schedule) => {
-                if let Some(h) = state.next_schedule_handle.take() {
-                    h.abort();
-                    drop(h);
-                }
-                state.schedule = new_schedule;
-                // schedule next ping on the "new" schedule
-                state.schedule_next(&myself)?;
-            }
+        if let Err(error) = state.job.work().await {
+            tracing::error!("Cron job {} failed with error {error}", state.job.id());
         }
-        Ok(())
+
+        // schedule next ping
+        state.schedule_next(&myself)
+    }
+
+    #[ractor::message(CronMessage::UpdateSchedule(new_schedule))]
+    fn update_schedule(
+        &self,
+        myself: ActorRef<CronMessage>,
+        new_schedule: Schedule,
+        state: &mut CronState,
+    ) -> Result<(), ActorProcessingErr> {
+        if let Some(handle) = state.next_schedule_handle.take() {
+            handle.abort();
+            drop(handle);
+        }
+        state.schedule = new_schedule;
+        // schedule next ping on the new schedule
+        state.schedule_next(&myself)
     }
 }
 

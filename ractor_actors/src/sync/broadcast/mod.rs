@@ -11,11 +11,13 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use ractor::Actor;
 use ractor::ActorId;
 use ractor::ActorProcessingErr;
 use ractor::ActorRef;
 use ractor::RpcReplyPort;
+
+#[cfg(test)]
+use ractor::Actor;
 
 #[cfg(test)]
 mod tests;
@@ -143,15 +145,15 @@ where
     continue_with_dead_targets: bool,
 }
 
-#[cfg_attr(feature = "async-trait", async_trait::async_trait)]
-impl<T> Actor for Broadcaster<T>
+#[ractor::actor(
+    message = BroadcasterMessage<T>,
+    state = BroadcasterState<T>,
+    arguments = BroadcasterConfig<T>,
+)]
+impl<T> Broadcaster<T>
 where
     T: ractor::Message + Clone,
 {
-    type Msg = BroadcasterMessage<T>;
-    type State = BroadcasterState<T>;
-    type Arguments = BroadcasterConfig<T>;
-
     async fn pre_start(
         &self,
         _: ActorRef<Self::Msg>,
@@ -169,37 +171,35 @@ where
         })
     }
 
-    async fn handle(
-        &self,
-        _: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            BroadcasterMessage::Broadcast(t) => {
-                for (who, target) in state.targets.iter() {
-                    if let Err(e) = target.send(t.clone()) {
-                        tracing::error!("Error forwarding message to target {who}: {e}");
-                        if !state.continue_with_dead_targets {
-                            // Fail the broadcaster actor
-                            return Err(e);
-                        }
-                    } else {
-                        tracing::debug!("Broadcast message to {who}");
-                    }
+    #[ractor::message(BroadcasterMessage::Broadcast(message))]
+    fn broadcast(&self, message: T, state: &BroadcasterState<T>) -> Result<(), ActorProcessingErr> {
+        for (who, target) in &state.targets {
+            if let Err(error) = target.send(message.clone()) {
+                tracing::error!("Error forwarding message to target {who}: {error}");
+                if !state.continue_with_dead_targets {
+                    // Fail the broadcaster actor
+                    return Err(error);
                 }
-            }
-            BroadcasterMessage::AddTarget(target) => {
-                state.targets.insert(target.id(), target);
-            }
-            BroadcasterMessage::RemoveTarget(target) => {
-                state.targets.remove(&target);
-            }
-            BroadcasterMessage::ListTargets(reply) => {
-                let ids = state.targets.keys().cloned().collect::<Vec<_>>();
-                let _ = reply.send(ids);
+            } else {
+                tracing::debug!("Broadcast message to {who}");
             }
         }
         Ok(())
+    }
+
+    #[ractor::message(BroadcasterMessage::AddTarget(target))]
+    fn add_target(&self, target: Box<dyn BroadcastTarget<T>>, state: &mut BroadcasterState<T>) {
+        state.targets.insert(target.id(), target);
+    }
+
+    #[ractor::message(BroadcasterMessage::RemoveTarget(target))]
+    fn remove_target(&self, target: ActorId, state: &mut BroadcasterState<T>) {
+        state.targets.remove(&target);
+    }
+
+    #[ractor::message(BroadcasterMessage::ListTargets(reply))]
+    fn list_targets(&self, reply: RpcReplyPort<Vec<ActorId>>, state: &BroadcasterState<T>) {
+        let ids = state.targets.keys().cloned().collect::<Vec<_>>();
+        let _ = reply.send(ids);
     }
 }
